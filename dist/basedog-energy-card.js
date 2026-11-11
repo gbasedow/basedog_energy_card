@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.6.1 */
-const CARD_VERSION="0.6.1";
+/* basedog_energy_card v0.7.0 */
+const CARD_VERSION="0.7.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true};
@@ -77,9 +77,10 @@ class BasedogEnergyCard extends HTMLElement{
  }
  render(){
   const c=this.config,r=this.result;
-  const css='<style>:host{display:block}ha-card{padding:16px}.head{display:flex;align-items:center;justify-content:space-between;gap:8px}.head h3{margin:4px 0 10px}button{cursor:pointer;border:0;background:transparent;color:inherit;font-size:22px}.muted{color:var(--secondary-text-color);font-size:12px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:auto;max-width:none;height:auto} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font:12px sans-serif}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
+  const css='<style>:host{display:block}ha-card{padding:16px}.head{display:flex;align-items:center;justify-content:space-between;gap:8px}.head h3{margin:4px 0 10px}button{cursor:pointer;border:0;background:transparent;color:inherit;font-size:22px}.muted{color:var(--secondary-text-color);font-size:12px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font:12px sans-serif}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
   const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
   this.shadowRoot.innerHTML=css+'<ha-card><div class="head"><h3>'+esc(c.title)+' <small style="font-size:11px;font-weight:normal;opacity:.65">v'+CARD_VERSION+'</small></h3><button title="Aktualisieren" id="reload">↻</button></div>'+body+'</ha-card>';
+  if(!this.vertical){const svg=this.shadowRoot.querySelector("svg"),card=this.shadowRoot.querySelector("ha-card");if(svg&&card){const configured=this.getBoundingClientRect().height||this.clientHeight;const head=card.querySelector(".head")?.getBoundingClientRect().height||48;const summary=card.querySelector(".muted")?.getBoundingClientRect().height||30;const available=Math.max(200,configured-head-summary-70);if(configured>260)svg.style.height=available+"px";svg.style.width="100%";svg.setAttribute("preserveAspectRatio","none");}}
   this.shadowRoot.querySelector("#reload").onclick=()=>{this.last=0;this.load();};
   const tip=this.shadowRoot.querySelector("#sankey-tip");
   if(tip){
@@ -110,53 +111,51 @@ class BasedogEnergyCard extends HTMLElement{
   let width,height,paths="",bars="",headers="";
   const tip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
   if(vertical){
-   // Each node owns a non-overlapping horizontal interval. Children subdivide
-   // their parent's interval, so flow ribbons remain parallel without stacking.
+   // Hierarchical Sankey: each parent distributes outgoing flow over disjoint
+   // adjacent source slots. Every link has its own source AND destination slot.
+   // The ribbon edges are curved, and sibling links never share a start point.
    width=360;
-   const left=15,usable=330,levelGap=165;
-   height=(depth+1)*levelGap+48;
-   const children=new Map();
-   for(const n of nodes.slice(1)){
-    if(!children.has(n.parent))children.set(n.parent,[]);
-    children.get(n.parent).push(n);
-   }
-   pos.set("root",{x:left,y:35,w:usable,h:17});
-   const allocate=(id)=>{
-    const parent=pos.get(id),siblings=children.get(id)||[];
-    if(!parent||!siblings.length)return;
-    const sum=siblings.reduce((s,n)=>s+Math.max(0,n.value),0);
-    const scale=sum>0?Math.min(1,parent.w*sum/Math.max(.000001,nodes.find(x=>x.id===id)?.value||sum)):0;
-    let cursor=parent.x;
-    for(const n of siblings){
-     const w=sum>0?parent.w*scale*Math.max(0,n.value)/sum:0;
-     pos.set(n.id,{x:cursor,y:35+n.depth*levelGap,w,h:17});
-     cursor+=w;
-     allocate(n.id);
+   const left=15,usable=330,levelGap=155,barHeight=17;
+   height=(depth+1)*levelGap+35;
+   const children=new Map(),byId=new Map(nodes.map(n=>[n.id,n]));
+   for(const n of nodes.slice(1)){if(!children.has(n.parent))children.set(n.parent,[]);children.get(n.parent).push(n);}
+   // Stable depth-first order makes the source and target order consistent.
+   const assign=(id,x,w)=>{
+    const n=byId.get(id);if(!n)return;
+    pos.set(id,{x,y:35+n.depth*levelGap,w,h:barHeight});
+    const kids=children.get(id)||[];
+    const positive=kids.reduce((s,k)=>s+Math.max(0,k.value),0);
+    let next=x;
+    for(const child of kids){
+     const cw=positive>0?Math.min(w,usable*Math.max(0,child.value)/max):0;
+     assign(child.id,next,cw);
+     next+=cw;
     }
    };
-   allocate("root");
-   for(let i=0;i<columns.length;i++){
-    headers+='<text x="15" y="'+(22+i*levelGap)+'" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>';
-   }
+   assign("root",left,usable);
+   for(let i=0;i<columns.length;i++)
+    headers+='<text x="15" y="'+(21+i*levelGap)+'" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>';
+   // The slot begins at the parent's running outgoing offset, not its center.
+   const outgoing=new Map();
    for(const n of nodes.slice(1)){
-    const p=pos.get(n.id),q=pos.get(n.parent);
-    if(!p||!q||p.w<=0)continue;
-    const y1=q.y+q.h,y2=p.y,m=(y1+y2)/2;
-    const x1=p.x,x2=p.x+p.w;
-    // Closed ribbon: both edges stay in the same exclusive x interval.
-    const d='M'+x1+' '+y1+' C'+x1+' '+m+','+x1+' '+m+','+x1+' '+y2+
-      ' L'+x2+' '+y2+' C'+x2+' '+m+','+x2+' '+m+','+x2+' '+y1+' Z';
-    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="#26a4bd" fill-opacity=".3" stroke="none"><title>'+tip(n)+'</title></path>';
+    const p=pos.get(n.id),q=pos.get(n.parent);if(!p||!q||p.w<=0)continue;
+    const slot=outgoing.get(n.parent)||0;
+    const sourceLeft=q.x+slot,sourceRight=sourceLeft+p.w;
+    outgoing.set(n.parent,slot+p.w);
+    const targetLeft=p.x,targetRight=p.x+p.w;
+    const y1=q.y+q.h,y2=p.y,mid=(y1+y2)/2;
+    const d='M'+sourceLeft+' '+y1+
+      ' C'+sourceLeft+' '+mid+','+targetLeft+' '+mid+','+targetLeft+' '+y2+
+      ' L'+targetRight+' '+y2+
+      ' C'+targetRight+' '+mid+','+sourceRight+' '+mid+','+sourceRight+' '+y1+' Z';
+    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="#26a4bd" fill-opacity=".32" stroke="none"><title>'+tip(n)+'</title></path>';
    }
    for(const n of nodes){
     const p=pos.get(n.id);if(!p||p.w<=0)continue;
     bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="1" fill="#238fa7"><title>'+tip(n)+'</title></rect>';
-    // Never shrink text below 12px: hide it when its interval is too narrow.
     const label=n.name+' · '+n.value.toFixed(2)+' kWh';
-    const estimated=label.length*6.7+10;
-    if(showLabels&&p.w>=estimated){
+    if(showLabels&&p.w>=label.length*6.7+10)
      bars+='<text x="'+(p.x+p.w/2)+'" y="'+(p.y+12)+'" text-anchor="middle" font-size="12">'+esc(label)+'</text>';
-    }
    }
   }else{
    const maxLabel=Math.max(16,...nodes.map(n=>n.name.length));
