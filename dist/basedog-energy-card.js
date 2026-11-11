@@ -210,7 +210,7 @@ class BasedogEnergyCard extends HTMLElement{
    const gid=gradientId(n),isResidual=!!n.residual;
    // Assigned flows stay monochrome through all intermediate levels.
    // Only the last link to a consumer gets the source-to-consumer gradient.
-   const sourceColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-(n.depth-1)/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':isResidual?primary:homeColor;
+   const sourceColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-(n.depth-1)/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':homeColor;
    const targetColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-n.depth/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':color(n);
    const isLastAssigned=!isResidual&&n.depth===depth;
    const transition=isResidual?0:isLastAssigned?0:100;
