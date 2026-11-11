@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.3.0 */
-const CARD_VERSION="0.3.0";
+/* basedog_energy_card v0.4.0 */
+const CARD_VERSION="0.4.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER]};
@@ -75,13 +75,20 @@ class BasedogEnergyCard extends HTMLElement{
  }
  render(){
   const c=this.config,r=this.result;
-  const css='<style>:host{display:block}ha-card{padding:16px}.head{display:flex;align-items:center;justify-content:space-between;gap:8px}.head h3{margin:4px 0 10px}button{cursor:pointer;border:0;background:transparent;color:inherit;font-size:22px}.muted{color:var(--secondary-text-color);font-size:12px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{min-width:760px;width:100%}svg text{fill:var(--primary-text-color,currentColor);font:12px sans-serif}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
+  const css='<style>:host{display:block}ha-card{padding:16px}.head{display:flex;align-items:center;justify-content:space-between;gap:8px}.head h3{margin:4px 0 10px}button{cursor:pointer;border:0;background:transparent;color:inherit;font-size:22px}.muted{color:var(--secondary-text-color);font-size:12px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:auto;max-width:none;height:auto} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font:12px sans-serif}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
   const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
   this.shadowRoot.innerHTML=css+'<ha-card><div class="head"><h3>'+esc(c.title)+' <small style="font-size:11px;font-weight:normal;opacity:.65">v'+CARD_VERSION+'</small></h3><button title="Aktualisieren" id="reload">↻</button></div>'+body+'</ha-card>';
   this.shadowRoot.querySelector("#reload").onclick=()=>{this.last=0;this.load();};
+  const tip=this.shadowRoot.querySelector("#sankey-tip");
+  if(tip){
+   const svg=this.shadowRoot.querySelector("svg");
+   svg?.addEventListener("pointermove",e=>{const el=e.target.closest?.("[data-tip]");if(!el){tip.style.display="none";return;}tip.textContent=el.getAttribute("data-tip");tip.style.display="block";const w=tip.offsetWidth,h=tip.offsetHeight;tip.style.left=Math.max(8,Math.min(e.clientX+14,window.innerWidth-w-8))+"px";tip.style.top=Math.max(8,Math.min(e.clientY+14,window.innerHeight-h-8))+"px";});
+   svg?.addEventListener("pointerleave",()=>tip.style.display="none");
+  }
  }
  diagram(data){
-  const levels=activeLevels(this.config),nodes=[{id:"root",name:this._h?.states[this.config.entity]?.attributes?.friendly_name||this.config.entity,value:data.total,depth:0}],map=new Map();
+  const levels=activeLevels(this.config);
+  const nodes=[{id:"root",name:this._h?.states[this.config.entity]?.attributes?.friendly_name||this.config.entity,value:data.total,depth:0}],map=new Map();
   for(const row of data.rows){
    let parent="root",path="";
    for(let i=0;i<levels.length;i++){
@@ -94,25 +101,35 @@ class BasedogEnergyCard extends HTMLElement{
   nodes.push(...map.values());
   const assigned=data.rows.reduce((s,x)=>s+x.value,0);
   if(data.total>assigned+.00001)nodes.push({id:"other",parent:"root",depth:1,name:"Nicht zugeordnet",value:data.total-assigned});
-  const depth=Math.max(1,...nodes.map(n=>n.depth)),columns=Array.from({length:depth+1},(_,i)=>nodes.filter(n=>n.depth===i));
-  const height=Math.max(400,...columns.map(col=>col.length*34+35)),width=1100;
-  const pos=new Map();
+  const depth=Math.max(1,...nodes.map(n=>n.depth));
+  const columns=Array.from({length:depth+1},(_,i)=>nodes.filter(n=>n.depth===i));
+  const columnWidth=300,width=(depth+1)*columnWidth+50;
+  const height=Math.max(400,...columns.map(col=>col.length*38+35));
+  const pos=new Map(),max=Math.max(1,...columns.map(cc=>cc.reduce((s,n)=>s+n.value,0)));
   for(let i=0;i<columns.length;i++){
-   const col=columns[i],usable=height-35-col.length*8;
-   const max=Math.max(1,...columns.map(cc=>cc.reduce((s,n)=>s+n.value,0)));
-   const weights=col.map(n=>Math.max(12,n.value/max*usable));
-   const factor=Math.min(1,usable/weights.reduce((a,b)=>a+b,0));
-   let y=15;for(let j=0;j<col.length;j++){pos.set(col[j].id,{x:15+i*990/depth,y,h:weights[j]*factor});y+=weights[j]*factor+8;}
+   const col=columns[i],usable=height-35-col.length*9;
+   const weights=col.map(n=>Math.max(14,n.value/max*usable));
+   const factor=Math.min(1,usable/Math.max(1,weights.reduce((a,b)=>a+b,0)));
+   let y=18;
+   for(let j=0;j<col.length;j++){const hh=weights[j]*factor;pos.set(col[j].id,{x:15+i*columnWidth,y,h:hh});y+=hh+9;}
   }
-  let svg="";
+  const tip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
+  let paths="",bars="";
   for(const n of nodes.slice(1)){
    const p=pos.get(n.id),q=pos.get(n.parent);if(!q)continue;
-   const x1=q.x+14,x2=p.x,m=(x1+x2)/2;
-   svg+='<path d="M'+x1+' '+(q.y+q.h/2)+' C'+m+' '+(q.y+q.h/2)+','+m+' '+(p.y+p.h/2)+','+x2+' '+(p.y+p.h/2)+'" fill="none" stroke="#26a4bd" stroke-opacity=".28" stroke-width="'+Math.max(2,p.h*.75)+'"/>';
+   const x1=q.x+16,x2=p.x,m=(x1+x2)/2;
+   const stroke=Math.max(5,Math.min(p.h,q.h)*.8);
+   const d="M"+x1+" "+(q.y+q.h/2)+" C"+m+" "+(q.y+q.h/2)+","+m+" "+(p.y+p.h/2)+","+x2+" "+(p.y+p.h/2);
+   paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="none" stroke="#26a4bd" stroke-opacity=".35" stroke-width="'+stroke+'"><title>'+tip(n)+'</title></path>';
   }
-  for(const n of nodes){const p=pos.get(n.id);svg+='<rect x="'+p.x+'" y="'+p.y+'" width="14" height="'+p.h+'" rx="3" fill="#238fa7"/><text x="'+(p.x+19)+'" y="'+(p.y+Math.min(16,p.h/2+4))+'">'+esc(n.name)+' ('+n.value.toFixed(2)+' kWh)</text>';}
-  const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><p class="muted">Schaltzustände von Leuchten sind keine Verbrauchsdaten. Dafür sind Energiezähler oder berechnete Energiesensoren nötig.</p><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
-  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' ausgewählten Entitäten mit Verbrauchswerten</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Sankey-Energieverbrauch">'+svg+'</svg></div>'+missing;
+  for(const n of nodes){
+   const p=pos.get(n.id);
+   bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="16" height="'+p.h+'" rx="3" fill="#238fa7"><title>'+tip(n)+'</title></rect>';
+   bars+='<text x="'+(p.x+22)+'" y="'+(p.y+Math.min(16,p.h/2+4))+'">'+esc(n.name)+'</text>';
+  }
+  const headers=columns.map((col,i)=>'<text x="'+(15+i*columnWidth)+'" y="13" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>').join("");
+  const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
+  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · Bei schmaler Ansicht horizontal scrollen</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Sankey-Energieverbrauch">'+headers+paths+bars+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
 }
 class BasedogEnergyEditor extends HTMLElement{
