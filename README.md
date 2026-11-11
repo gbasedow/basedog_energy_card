@@ -8,7 +8,9 @@ Eine experimentelle Home-Assistant-Lovelace-Karte zur Darstellung von **Energiev
 - Weitere Energieentitäten einzeln oder anhand von Home-Assistant-Labels auswählen
 - Auswertungsdauer in Minuten, Stunden, Tagen oder Wochen
 - Unabhängiger Bezugszeitpunkt: **Jetzt** oder ein fester Zeitpunkt
-- Ebenen in frei wählbarer Reihenfolge: **Etage → Bereich → Entität**
+- Ebenen **Etage**, **Bereich**, **Entität** einzeln im GUI aktivierbar; feste Reihenfolge **Etage → Bereich → Entität**
+- Bereich und Etage werden auch aus dem **zugehörigen Gerät** übernommen, wenn die Entität selbst keinen Bereich besitzt
+- Entitäten ohne geeignete Energie-Langzeitstatistiken werden unterhalb des Diagramms aufgelistet (z. B. reine Licht-Schalter)
 - Konfiguration über den visuellen Karteneditor (GUI)
 - Anzeige nicht zugeordneten Verbrauchs und Warnung bei möglicher Doppelzählung
 
@@ -58,3 +60,7 @@ Die Sensoren müssen geeignete **Langzeitstatistiken** mit Energieeinheiten (z. 
 `npm run check` prüft die JavaScript-Syntax. Die lauffähige Datei liegt in `dist/basedog-energy-card.js`.
 
 Lizenz: MIT.
+
+## Version 0.2.0
+
+Die Karte berücksichtigt Bereichszuordnungen von Geräten, erlaubt das Ein-/Ausschalten der drei Hierarchieebenen und zeigt nicht auswertbare Entitäten mit Begründung an. Nur Energie-Entitäten mit Langzeitstatistiken können als kWh-Verbrauch dargestellt werden; reine `light.*`-Entitäten haben in der Regel keine Verbrauchsstatistik.
