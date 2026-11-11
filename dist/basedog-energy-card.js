@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.5.0 */
-const CARD_VERSION="0.5.0";
+/* basedog_energy_card v0.5.1 */
+const CARD_VERSION="0.5.1";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true};
@@ -109,19 +109,32 @@ class BasedogEnergyCard extends HTMLElement{
   const maxLabel=Math.max(16,...nodes.map(n=>n.name.length));
   const columnWidth=Math.max(300,Math.min(760,maxLabel*7.4+95));
   const horizontalHeight=Math.max(420,...columns.map(col=>col.length*39+50));
-  const verticalWidth=Math.max(760,...columns.map(col=>col.length*125+60));
-  const width=vertical?verticalWidth:(depth+1)*columnWidth+35;
-  const height=vertical?(depth+1)*195+55:horizontalHeight;
+  // Mobile: keep the viewBox narrow and grow vertically with the number of entities.
+  // This avoids scaling 43 nodes into a few unreadable pixels.
+  const mobileWidth=360,mobileRowHeight=48,mobileSectionGap=72;
+  const sectionStarts=[];
+  let sectionY=20;
+  for(const col of columns){sectionStarts.push(sectionY);sectionY+=Math.max(1,col.length)*mobileRowHeight+mobileSectionGap;}
+  const width=vertical?mobileWidth:(depth+1)*columnWidth+35;
+  const height=vertical?sectionY+15:horizontalHeight;
   const pos=new Map(),max=Math.max(1,...columns.map(cc=>cc.reduce((s,n)=>s+n.value,0)));
   for(let i=0;i<columns.length;i++){
-   const col=columns[i],space=vertical?width-50-col.length*10:height-48-col.length*9;
-   const weights=col.map(n=>Math.max(vertical?65:15,n.value/max*space));
-   const factor=Math.min(1,space/Math.max(1,weights.reduce((a,b)=>a+b,0)));
-   let cursor=20;
-   for(let j=0;j<col.length;j++){
-    const size=weights[j]*factor;
-    pos.set(col[j].id,vertical?{x:cursor,y:30+i*195,w:size,h:16}:{x:15+i*columnWidth,y:cursor,w:16,h:size});
-    cursor+=size+(vertical?10:9);
+   const col=columns[i];
+   if(vertical){
+    for(let j=0;j<col.length;j++){
+     const n=col[j],w=Math.max(24,Math.min(320,n.value/max*320));
+     pos.set(n.id,{x:15,y:sectionStarts[i]+28+j*mobileRowHeight,w,h:14});
+    }
+   }else{
+    const space=height-48-col.length*9;
+    const weights=col.map(n=>Math.max(15,n.value/max*space));
+    const factor=Math.min(1,space/Math.max(1,weights.reduce((a,b)=>a+b,0)));
+    let cursor=20;
+    for(let j=0;j<col.length;j++){
+     const size=weights[j]*factor;
+     pos.set(col[j].id,{x:15+i*columnWidth,y:cursor,w:16,h:size});
+     cursor+=size+9;
+    }
    }
   }
   const tip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
@@ -138,13 +151,13 @@ class BasedogEnergyCard extends HTMLElement{
    const p=pos.get(n.id);
    bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="3" fill="#238fa7"><title>'+tip(n)+'</title></rect>';
    if(showLabels){
-    const tx=vertical?p.x:p.x+p.w+7,ty=vertical?p.y+p.h+18:p.y+Math.min(16,p.h/2+4);
+    const tx=vertical?p.x:p.x+p.w+7,ty=vertical?p.y+p.h+15:p.y+Math.min(16,p.h/2+4);
     bars+='<text x="'+tx+'" y="'+ty+'" font-size="12">'+esc(n.name)+'</text>';
    }
   }
-  const headers=columns.map((col,i)=>'<text x="'+(vertical?20:15+i*columnWidth)+'" y="'+(vertical?20:13)+'" font-weight="bold" '+(vertical?'transform="translate(0 '+(i*195)+')"':'')+'>'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>').join("");
+  const headers=columns.map((col,i)=>'<text x="'+(vertical?20:15+i*columnWidth)+'" y="'+(vertical?16:13)+'" font-weight="bold" '+(vertical?'transform="translate(0 '+(sectionStarts[i])+')"':'')+'>'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>').join("");
   const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
-  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · '+(vertical?"Vertikale Ansicht":"Horizontale Ansicht")+'</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg style="width:100%;height:auto;max-width:100%;overflow:visible" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Sankey-Energieverbrauch">'+headers+paths+bars+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
+  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · '+(vertical?"Vertikale Ansicht":"Horizontale Ansicht")+'</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg style="display:block;width:100%;height:auto;max-width:100%;overflow:hidden" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Sankey-Energieverbrauch">'+headers+paths+bars+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
 }
 class BasedogEnergyEditor extends HTMLElement{
