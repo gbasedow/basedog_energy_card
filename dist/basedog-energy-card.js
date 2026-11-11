@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.13.0 */
-const CARD_VERSION="0.13.0";
+/* basedog_energy_card v0.14.0 */
+const CARD_VERSION="0.14.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto",group_below_kwh:0};
@@ -147,23 +147,22 @@ class BasedogEnergyCard extends HTMLElement{
   const gap=6,nodeThickness=vertical?15:14;
   const layout=new Map();
   const rootSpan=breadth-breadthStart-breadthEnd;
-  const scale=rootSpan/Math.max(.001,root.value);
-  const safeScale=Math.max(.01,scale);
-  // Root uses all available width (vertical) or height (horizontal).
-  // Other columns fan out with gaps but cannot expand beyond the viewport.
   const levelStart=vertical?25:18;
   const levelEnd=vertical?viewHeight-20:viewWidth-18;
   const levelStep=Math.max(1,(levelEnd-levelStart-nodeThickness)/Math.max(1,depth));
+  // Reserve real gaps BEFORE scaling each column. In v0.13 the root filled
+  // the entire cross-axis and left zero room for gaps, so all ribbons
+  // inherited the same coordinates and appeared straight.
   for(let i=0;i<columns.length;i++){
-   const col=columns[i];
-   const total=col.reduce((s,n)=>s+Math.max(0,n.value)*safeScale,0);
-   const naturalGap=i===0?0:gap;
-   const free=Math.max(0,rootSpan-total);
-   const actualGap=col.length>1?Math.min(naturalGap,free/(col.length-1)):0;
-   const occupied=total+Math.max(0,col.length-1)*actualGap;
-   let cursor=breadthStart+Math.max(0,(rootSpan-occupied)/2);
+   const col=columns[i],sum=col.reduce((s,n)=>s+Math.max(0,n.value),0);
+   const desiredGap=i===0?0:Math.min(vertical?10:12,rootSpan/Math.max(1,col.length*3));
+   const totalGap=Math.min(rootSpan*.38,desiredGap*Math.max(0,col.length-1));
+   const actualGap=col.length>1?totalGap/(col.length-1):0;
+   const columnScale=(rootSpan-totalGap)/Math.max(.001,sum);
+   const used=sum*columnScale+totalGap;
+   let cursor=breadthStart+Math.max(0,(rootSpan-used)/2);
    for(const n of col){
-    const span=Math.max(.05,n.value*safeScale);
+    const span=Math.max(.05,n.value*columnScale);
     const levelPos=levelStart+i*levelStep;
     layout.set(n.id,{x:vertical?cursor:levelPos,y:vertical?levelPos:cursor,w:vertical?span:nodeThickness,h:vertical?nodeThickness:span,span});
     cursor+=span+actualGap;
@@ -188,18 +187,22 @@ class BasedogEnergyCard extends HTMLElement{
   for(const n of nodes.slice(1)){
    const p=layout.get(n.id),q=layout.get(n.parent);
    if(!p||!q||n.value<=0)continue;
-   const flow=n.value*safeScale;
+   // Source and destination ports are scaled independently to their nodes.
+   const siblings=children.get(n.parent)||[];
+   const siblingSum=siblings.reduce((s,k)=>s+Math.max(0,k.value),0);
+   const sourceFlow=q.span*n.value/Math.max(.001,siblingSum);
+   const targetFlow=p.span;
    const sourceOffset=outgoing.get(n.parent)||0,targetOffset=incoming.get(n.id)||0;
-   outgoing.set(n.parent,sourceOffset+flow);incoming.set(n.id,targetOffset+flow);
+   outgoing.set(n.parent,sourceOffset+sourceFlow);incoming.set(n.id,targetOffset+targetFlow);
    let d;
    if(vertical){
     const x1=q.x+sourceOffset,x2=p.x+targetOffset,y1=q.y+q.h,y2=p.y,cy=y1+(y2-y1)*.5;
     d='M'+x1+' '+y1+' C'+x1+' '+cy+','+x2+' '+cy+','+x2+' '+y2+
-      ' L'+(x2+flow)+' '+y2+' C'+(x2+flow)+' '+cy+','+(x1+flow)+' '+cy+','+(x1+flow)+' '+y1+' Z';
+      ' L'+(x2+targetFlow)+' '+y2+' C'+(x2+flow)+' '+cy+','+(x1+sourceFlow)+' '+cy+','+(x1+flow)+' '+y1+' Z';
    }else{
     const y1=q.y+sourceOffset,y2=p.y+targetOffset,x1=q.x+q.w,x2=p.x,cx=x1+(x2-x1)*.5;
     d='M'+x1+' '+y1+' C'+cx+' '+y1+','+cx+' '+y2+','+x2+' '+y2+
-      ' L'+x2+' '+(y2+flow)+' C'+cx+' '+(y2+flow)+','+cx+' '+(y1+flow)+','+x1+' '+(y1+flow)+' Z';
+      ' L'+x2+' '+(y2+targetFlow)+' C'+cx+' '+(y2+flow)+','+cx+' '+(y1+sourceFlow)+','+x1+' '+(y1+flow)+' Z';
    }
    const gid=gradientId(n),isResidual=!!n.residual;
    const sourceColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-(n.depth-1)/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':color(byId.get(n.parent)||root);
@@ -209,7 +212,7 @@ class BasedogEnergyCard extends HTMLElement{
    paths+='<path class="sankey-hover" data-tip="'+tooltip(n)+'" d="'+d+'" fill="url(#'+gid+')" fill-opacity=".4"><title>'+tooltip(n)+'</title></path>';
    // Label inside the ribbon, only if it remains legible at the rendered scale.
    const text=n.name+' · '+n.value.toFixed(2)+' kWh',needed=text.length*6.5+10;
-   const physicalFlow=flow*(vertical?Math.min(1,(this.cardWidth||360)/viewWidth):1);
+   const physicalFlow=Math.min(sourceFlow,targetFlow)*(vertical?Math.min(1,(this.cardWidth||360)/viewWidth):1);
    const run=levelStep-nodeThickness;
    if(showLabels&&physicalFlow>=14&&run>=needed){
     const px=vertical?p.x+p.w/2:q.x+q.w+run/2;
