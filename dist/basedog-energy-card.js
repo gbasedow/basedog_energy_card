@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.15.0 */
-const CARD_VERSION="0.15.0";
+/* basedog_energy_card v0.16.0 */
+const CARD_VERSION="0.16.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto",group_below_kwh:0};
@@ -150,25 +150,31 @@ class BasedogEnergyCard extends HTMLElement{
   const levelStart=vertical?25:18;
   const levelEnd=vertical?viewHeight-20:viewWidth-18;
   const levelStep=Math.max(1,(levelEnd-levelStart-nodeThickness)/Math.max(1,depth));
-  // Reserve real gaps BEFORE scaling each column. In v0.13 the root filled
-  // the entire cross-axis and left zero room for gaps, so all ribbons
-  // inherited the same coordinates and appeared straight.
+  // A fixed residual lane branches ONCE from the root, then stays at
+  // exactly the same position and width through every subsequent level.
+  const residual=nodes.find(n=>n.residual);
+  const residualWidth=residual?rootSpan*residual.value/Math.max(.001,root.value):0;
+  const residualStart=breadthStart+rootSpan-residualWidth;
   for(let i=0;i<columns.length;i++){
-   const col=columns[i],sum=col.reduce((s,n)=>s+Math.max(0,n.value),0);
-   const desiredGap=i===0?0:Math.min(vertical?10:12,rootSpan/Math.max(1,col.length*3));
-   // Shift the residual lane progressively inward: its outer edge becomes
-   // curved instead of running straight along the chart boundary.
-   const residualInset=i===0?0:Math.min(vertical?34:48,rootSpan*.13)*i/Math.max(1,depth);
-   const totalGap=Math.min(rootSpan*.38,desiredGap*Math.max(0,col.length-1));
-   const actualGap=col.length>1?totalGap/(col.length-1):0;
-   const columnScale=(rootSpan-totalGap-residualInset)/Math.max(.001,sum);
-   const used=sum*columnScale+totalGap;
-   let cursor=breadthStart+Math.max(0,(rootSpan-residualInset-used)/2);
-   for(const n of col){
-    const span=Math.max(.05,n.value*columnScale);
-    const levelPos=levelStart+i*levelStep;
+   const col=columns[i],normal=col.filter(n=>!n.residual);
+   const residualNode=col.find(n=>n.residual);
+   const normalValue=normal.reduce((s,n)=>s+Math.max(0,n.value),0);
+   const normalSpan=rootSpan-residualWidth;
+   const reserveGap=i===0||!residualNode?0:Math.min(10,normalSpan*.04);
+   const available=Math.max(0,normalSpan-reserveGap);
+   const gap=i===0?0:Math.min(vertical?9:12,available/Math.max(1,normal.length*3));
+   const gaps=Math.min(available*.32,Math.max(0,normal.length-1)*gap);
+   const scale=(available-gaps)/Math.max(.001,normalValue);
+   const used=normalValue*scale+gaps;
+   let cursor=breadthStart+Math.max(0,(available-used)/2);
+   const levelPos=levelStart+i*levelStep;
+   for(const n of normal){
+    const span=Math.max(.05,n.value*scale);
     layout.set(n.id,{x:vertical?cursor:levelPos,y:vertical?levelPos:cursor,w:vertical?span:nodeThickness,h:vertical?nodeThickness:span,span});
-    cursor+=span+actualGap;
+    cursor+=span+gap;
+   }
+   if(residualNode){
+    layout.set(residualNode.id,{x:vertical?residualStart:levelPos,y:vertical?levelPos:residualStart,w:vertical?residualWidth:nodeThickness,h:vertical?nodeThickness:residualWidth,span:residualWidth});
    }
   }
   // Match the native energy Sankey theme colors (--graph-color-N).
@@ -178,7 +184,7 @@ class BasedogEnergyCard extends HTMLElement{
   const gray=styles.getPropertyValue("--state-unavailable-color").trim()||"#bdbdbd";
   const nodeColor=new Map([["root",primary]]);let colorIndex=0;
   for(const n of nodes.slice(1)){
-   nodeColor.set(n.id,n.residual||n.name==="Zusammengefasst"?gray:n.depth===1?homeColor:n.depth===depth?(palette[colorIndex++%54]||homeColor):(nodeColor.get(n.parent)||homeColor));
+   nodeColor.set(n.id,n.residual||n.name==="Zusammengefasst"?gray:n.depth===depth?(palette[colorIndex++%54]||homeColor):primary);
   }
   const color=n=>nodeColor.get(n.id)||primary;
   const tooltip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
@@ -210,7 +216,7 @@ class BasedogEnergyCard extends HTMLElement{
    const gid=gradientId(n),isResidual=!!n.residual;
    // Assigned flows stay monochrome through all intermediate levels.
    // Only the last link to a consumer gets the source-to-consumer gradient.
-   const sourceColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-(n.depth-1)/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':homeColor;
+   const sourceColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-(n.depth-1)/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':primary;
    const targetColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-n.depth/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':color(n);
    const isLastAssigned=!isResidual&&n.depth===depth;
    const transition=isResidual?0:isLastAssigned?0:100;
