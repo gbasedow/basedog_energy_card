@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.12.0 */
-const CARD_VERSION="0.12.0";
+/* basedog_energy_card v0.13.0 */
+const CARD_VERSION="0.13.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto",group_below_kwh:0};
@@ -80,7 +80,7 @@ class BasedogEnergyCard extends HTMLElement{
   const css='<style>:host{display:block}ha-card{padding:16px}.head{display:flex;align-items:center;justify-content:space-between;gap:8px}.head h3{margin:4px 0 10px}button{cursor:pointer;border:0;background:transparent;color:inherit;font-size:22px}.muted{color:var(--secondary-text-color);font-size:12px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font:12px sans-serif}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
   const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
   this.shadowRoot.innerHTML=css+'<ha-card><div class="head"><h3>'+esc(c.title)+' <small style="font-size:11px;font-weight:normal;opacity:.65">v'+CARD_VERSION+'</small></h3><button title="Aktualisieren" id="reload">↻</button></div>'+body+'</ha-card>';
-  if(!this.vertical){const svg=this.shadowRoot.querySelector("svg"),card=this.shadowRoot.querySelector("ha-card");if(svg&&card){const configured=(Number(this.config.grid_options?.rows)||8)*56;const head=card.querySelector(".head")?.getBoundingClientRect().height||48;const summary=card.querySelector(".muted")?.getBoundingClientRect().height||30;const available=Math.max(200,configured-head-summary-70);svg.style.height=available+"px";svg.style.width="100%";svg.setAttribute("preserveAspectRatio","none");}}
+  {const svg=this.shadowRoot.querySelector("svg"),card=this.shadowRoot.querySelector("ha-card");if(svg&&card){const configured=Math.max(180,(Number(this.config.grid_options?.rows)||8)*56);const head=card.querySelector(".head")?.getBoundingClientRect().height||48;const summary=card.querySelector(".muted")?.getBoundingClientRect().height||30;const available=Math.max(100,configured-head-summary-48);svg.style.height=available+"px";svg.style.width="100%";svg.setAttribute("preserveAspectRatio","none");}}
   this.shadowRoot.querySelector("#reload").onclick=()=>{this.last=0;this.load();};
   const tip=this.shadowRoot.querySelector("#sankey-tip");
   if(tip){
@@ -137,22 +137,36 @@ class BasedogEnergyCard extends HTMLElement{
   walk("root");
   const columns=Array.from({length:depth+1},(_,i)=>nodes.filter(n=>n.depth===i).sort((a,b)=>(rank.get(a.id)??-1)-(rank.get(b.id)??-1)));
   const max=Math.max(.001,root.value,assigned);
+  // Fit both orientations to the configured grid height, not intrinsic SVG height.
+  // Root always spans the full usable cross-axis, including the residual flow.
+  const configuredHeight=Math.max(180,(Number(this.config.grid_options?.rows)||8)*56);
   const viewWidth=vertical?360:Math.max(850,this.cardWidth||850);
-  const viewHeight=vertical?Math.max(440,depth*155+100):Math.max(260,(Number(this.config.grid_options?.rows)||8)*56-120);
+  const viewHeight=Math.max(110,configuredHeight-115);
   const breadth=vertical?viewWidth:viewHeight;
-  const breadthStart=vertical?14:20,breadthEnd=vertical?14:20;
+  const breadthStart=vertical?12:12,breadthEnd=vertical?12:12;
   const gap=6,nodeThickness=vertical?15:14;
-  const layout=new Map(),scale=Math.min(...columns.map(col=>(breadth-breadthStart-breadthEnd-gap*(col.length-1))/Math.max(.001,col.reduce((s,n)=>s+Math.max(0,n.value),0))));
+  const layout=new Map();
+  const rootSpan=breadth-breadthStart-breadthEnd;
+  const scale=rootSpan/Math.max(.001,root.value);
   const safeScale=Math.max(.01,scale);
-  // Every column uses the same value-to-pixel scale; node gaps fan out branches.
+  // Root uses all available width (vertical) or height (horizontal).
+  // Other columns fan out with gaps but cannot expand beyond the viewport.
+  const levelStart=vertical?25:18;
+  const levelEnd=vertical?viewHeight-20:viewWidth-18;
+  const levelStep=Math.max(1,(levelEnd-levelStart-nodeThickness)/Math.max(1,depth));
   for(let i=0;i<columns.length;i++){
-   const col=columns[i],totalSize=col.reduce((s,n)=>s+Math.max(0,n.value)*safeScale,0)+Math.max(0,col.length-1)*gap;
-   let cursor=breadthStart+Math.max(0,(breadth-breadthStart-breadthEnd-totalSize)/2);
+   const col=columns[i];
+   const total=col.reduce((s,n)=>s+Math.max(0,n.value)*safeScale,0);
+   const naturalGap=i===0?0:gap;
+   const free=Math.max(0,rootSpan-total);
+   const actualGap=col.length>1?Math.min(naturalGap,free/(col.length-1)):0;
+   const occupied=total+Math.max(0,col.length-1)*actualGap;
+   let cursor=breadthStart+Math.max(0,(rootSpan-occupied)/2);
    for(const n of col){
-    const span=Math.max(.1,n.value*safeScale);
-    const levelPos=vertical?34+i*155:20+i*(viewWidth-55-nodeThickness)/Math.max(1,depth);
+    const span=Math.max(.05,n.value*safeScale);
+    const levelPos=levelStart+i*levelStep;
     layout.set(n.id,{x:vertical?cursor:levelPos,y:vertical?levelPos:cursor,w:vertical?span:nodeThickness,h:vertical?nodeThickness:span,span});
-    cursor+=span+gap;
+    cursor+=span+actualGap;
    }
   }
   // Match the native energy Sankey theme colors (--graph-color-N).
@@ -187,13 +201,13 @@ class BasedogEnergyCard extends HTMLElement{
     d='M'+x1+' '+y1+' C'+cx+' '+y1+','+cx+' '+y2+','+x2+' '+y2+
       ' L'+x2+' '+(y2+flow)+' C'+cx+' '+(y2+flow)+','+cx+' '+(y1+flow)+','+x1+' '+(y1+flow)+' Z';
    }
-   const gid=gradientId(n),sourceColor=color(byId.get(n.parent)||root);
-   gradients+='<linearGradient id="'+gid+'" x1="'+(vertical?'0%':'0%')+'" y1="0%" x2="'+(vertical?'0%':'100%')+'" y2="'+(vertical?'100%':'0%')+'"><stop offset="0%" stop-color="'+esc(sourceColor)+'"/><stop offset="85%" stop-color="'+esc(sourceColor)+'"/><stop offset="100%" stop-color="'+esc(color(n))+'"/></linearGradient>';
+   const gid=gradientId(n),sourceColor=color(byId.get(n.parent)||root),transition=n.residual||byId.get(n.parent)?.residual?0:85;
+   gradients+='<linearGradient id="'+gid+'" x1="'+(vertical?'0%':'0%')+'" y1="0%" x2="'+(vertical?'0%':'100%')+'" y2="'+(vertical?'100%':'0%')+'"><stop offset="0%" stop-color="'+esc(sourceColor)+'"/><stop offset="'+transition+'%" stop-color="'+esc(sourceColor)+'"/><stop offset="100%" stop-color="'+esc(color(n))+'"/></linearGradient>';
    paths+='<path class="sankey-hover" data-tip="'+tooltip(n)+'" d="'+d+'" fill="url(#'+gid+')" fill-opacity=".4"><title>'+tooltip(n)+'</title></path>';
    // Label inside the ribbon, only if it remains legible at the rendered scale.
    const text=n.name+' · '+n.value.toFixed(2)+' kWh',needed=text.length*6.5+10;
    const physicalFlow=flow*(vertical?Math.min(1,(this.cardWidth||360)/viewWidth):1);
-   const run=vertical?155-nodeThickness:(viewWidth-55)/Math.max(1,depth)-nodeThickness;
+   const run=levelStep-nodeThickness;
    if(showLabels&&physicalFlow>=14&&run>=needed){
     const px=vertical?p.x+p.w/2:q.x+q.w+run/2;
     const py=vertical?q.y+q.h+run/2:p.y+p.h/2+4;
