@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.6.0 */
-const CARD_VERSION="0.6.0";
+/* basedog_energy_card v0.6.1 */
+const CARD_VERSION="0.6.1";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true};
@@ -110,39 +110,53 @@ class BasedogEnergyCard extends HTMLElement{
   let width,height,paths="",bars="",headers="";
   const tip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
   if(vertical){
-   // Arrange nodes by ancestry, with separate label rows and actual flow-width ribbons.
-   // A fixed 360-unit canvas remains readable at phone width; height grows as needed.
+   // Each node owns a non-overlapping horizontal interval. Children subdivide
+   // their parent's interval, so flow ribbons remain parallel without stacking.
    width=360;
+   const left=15,usable=330,levelGap=165;
+   height=(depth+1)*levelGap+48;
    const children=new Map();
-   for(const n of nodes.slice(1)){if(!children.has(n.parent))children.set(n.parent,[]);children.get(n.parent).push(n);}
-   const ordered=[];
-   const walk=id=>{for(const n of children.get(id)||[]){ordered.push(n);walk(n.id);}};
-   walk("root");
-   const order=new Map(ordered.map((n,i)=>[n.id,i]));
-   const rowHeight=54,gap=92,starts=[];
-   let cursor=18;
-   for(const col of columns){starts.push(cursor);cursor+=Math.max(1,col.length)*rowHeight+gap;}
-   height=cursor+30;
-   for(let i=0;i<columns.length;i++){
-    const col=[...columns[i]].sort((a,b)=>(order.get(a.id)??-1)-(order.get(b.id)??-1));
-    headers+='<text x="12" y="'+(starts[i]+13)+'" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>';
-    for(let j=0;j<col.length;j++){
-     const n=col[j],y=starts[i]+25+j*rowHeight;
-     // Flow widths encode kWh; a minimum hit target is drawn separately.
-     const flowWidth=Math.max(.6,Math.min(330,n.value/max*330));
-     pos.set(n.id,{x:15,y,w:flowWidth,h:15});
+   for(const n of nodes.slice(1)){
+    if(!children.has(n.parent))children.set(n.parent,[]);
+    children.get(n.parent).push(n);
+   }
+   pos.set("root",{x:left,y:35,w:usable,h:17});
+   const allocate=(id)=>{
+    const parent=pos.get(id),siblings=children.get(id)||[];
+    if(!parent||!siblings.length)return;
+    const sum=siblings.reduce((s,n)=>s+Math.max(0,n.value),0);
+    const scale=sum>0?Math.min(1,parent.w*sum/Math.max(.000001,nodes.find(x=>x.id===id)?.value||sum)):0;
+    let cursor=parent.x;
+    for(const n of siblings){
+     const w=sum>0?parent.w*scale*Math.max(0,n.value)/sum:0;
+     pos.set(n.id,{x:cursor,y:35+n.depth*levelGap,w,h:17});
+     cursor+=w;
+     allocate(n.id);
     }
+   };
+   allocate("root");
+   for(let i=0;i<columns.length;i++){
+    headers+='<text x="15" y="'+(22+i*levelGap)+'" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>';
    }
    for(const n of nodes.slice(1)){
-    const p=pos.get(n.id),q=pos.get(n.parent);if(!p||!q)continue;
-    const x1=q.x+q.w/2,x2=p.x+p.w/2,y1=q.y+q.h,y2=p.y;
-    const d='M'+x1+' '+y1+' C'+x1+' '+((y1+y2)/2)+','+x2+' '+((y1+y2)/2)+','+x2+' '+y2;
-    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="none" stroke="#26a4bd" stroke-opacity=".3" stroke-width="'+Math.max(2,Math.min(p.w,q.w)*.65)+'"><title>'+tip(n)+'</title></path>';
+    const p=pos.get(n.id),q=pos.get(n.parent);
+    if(!p||!q||p.w<=0)continue;
+    const y1=q.y+q.h,y2=p.y,m=(y1+y2)/2;
+    const x1=p.x,x2=p.x+p.w;
+    // Closed ribbon: both edges stay in the same exclusive x interval.
+    const d='M'+x1+' '+y1+' C'+x1+' '+m+','+x1+' '+m+','+x1+' '+y2+
+      ' L'+x2+' '+y2+' C'+x2+' '+m+','+x2+' '+m+','+x2+' '+y1+' Z';
+    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="#26a4bd" fill-opacity=".3" stroke="none"><title>'+tip(n)+'</title></path>';
    }
    for(const n of nodes){
-    const p=pos.get(n.id);
-    bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="2" fill="#238fa7"><title>'+tip(n)+'</title></rect>';
-    if(showLabels)bars+='<text x="15" y="'+(p.y+31)+'" font-size="12">'+esc(n.name)+' · '+n.value.toFixed(2)+' kWh</text>';
+    const p=pos.get(n.id);if(!p||p.w<=0)continue;
+    bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="1" fill="#238fa7"><title>'+tip(n)+'</title></rect>';
+    // Never shrink text below 12px: hide it when its interval is too narrow.
+    const label=n.name+' · '+n.value.toFixed(2)+' kWh';
+    const estimated=label.length*6.7+10;
+    if(showLabels&&p.w>=estimated){
+     bars+='<text x="'+(p.x+p.w/2)+'" y="'+(p.y+12)+'" text-anchor="middle" font-size="12">'+esc(label)+'</text>';
+    }
    }
   }else{
    const maxLabel=Math.max(16,...nodes.map(n=>n.name.length));
