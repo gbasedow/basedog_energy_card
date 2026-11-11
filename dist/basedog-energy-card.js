@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.14.1 */
-const CARD_VERSION="0.14.1";
+/* basedog_energy_card v0.15.0 */
+const CARD_VERSION="0.15.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto",group_below_kwh:0};
@@ -156,11 +156,14 @@ class BasedogEnergyCard extends HTMLElement{
   for(let i=0;i<columns.length;i++){
    const col=columns[i],sum=col.reduce((s,n)=>s+Math.max(0,n.value),0);
    const desiredGap=i===0?0:Math.min(vertical?10:12,rootSpan/Math.max(1,col.length*3));
+   // Shift the residual lane progressively inward: its outer edge becomes
+   // curved instead of running straight along the chart boundary.
+   const residualInset=i===0?0:Math.min(vertical?34:48,rootSpan*.13)*i/Math.max(1,depth);
    const totalGap=Math.min(rootSpan*.38,desiredGap*Math.max(0,col.length-1));
    const actualGap=col.length>1?totalGap/(col.length-1):0;
-   const columnScale=(rootSpan-totalGap)/Math.max(.001,sum);
+   const columnScale=(rootSpan-totalGap-residualInset)/Math.max(.001,sum);
    const used=sum*columnScale+totalGap;
-   let cursor=breadthStart+Math.max(0,(rootSpan-used)/2);
+   let cursor=breadthStart+Math.max(0,(rootSpan-residualInset-used)/2);
    for(const n of col){
     const span=Math.max(.05,n.value*columnScale);
     const levelPos=levelStart+i*levelStep;
@@ -205,10 +208,14 @@ class BasedogEnergyCard extends HTMLElement{
       ' L'+x2+' '+(y2+targetFlow)+' C'+cx+' '+(y2+targetFlow)+','+cx+' '+(y1+sourceFlow)+','+x1+' '+(y1+sourceFlow)+' Z';
    }
    const gid=gradientId(n),isResidual=!!n.residual;
-   const sourceColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-(n.depth-1)/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':color(byId.get(n.parent)||root);
+   // Assigned flows stay monochrome through all intermediate levels.
+   // Only the last link to a consumer gets the source-to-consumer gradient.
+   const sourceColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-(n.depth-1)/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':isResidual?primary:homeColor;
    const targetColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-n.depth/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':color(n);
-   const transition=isResidual?0:85;
-   gradients+='<linearGradient id="'+gid+'" x1="'+(vertical?'0%':'0%')+'" y1="0%" x2="'+(vertical?'0%':'100%')+'" y2="'+(vertical?'100%':'0%')+'"><stop offset="0%" stop-color="'+esc(sourceColor)+'"/><stop offset="'+transition+'%" stop-color="'+esc(sourceColor)+'"/><stop offset="100%" stop-color="'+esc(targetColor)+'"/></linearGradient>';
+   const isLastAssigned=!isResidual&&n.depth===depth;
+   const transition=isResidual?0:isLastAssigned?0:100;
+   const endColor=isResidual?targetColor:isLastAssigned?color(n):sourceColor;
+   gradients+='<linearGradient id="'+gid+'" x1="'+(vertical?'0%':'0%')+'" y1="0%" x2="'+(vertical?'0%':'100%')+'" y2="'+(vertical?'100%':'0%')+'"><stop offset="0%" stop-color="'+esc(sourceColor)+'"/><stop offset="'+transition+'%" stop-color="'+esc(sourceColor)+'"/><stop offset="100%" stop-color="'+esc(endColor)+'"/></linearGradient>';
    paths+='<path class="sankey-hover" data-tip="'+tooltip(n)+'" d="'+d+'" fill="url(#'+gid+')" fill-opacity=".4"><title>'+tooltip(n)+'</title></path>';
    // Label inside the ribbon, only if it remains legible at the rendered scale.
    const text=n.name+' · '+n.value.toFixed(2)+' kWh',needed=text.length*6.5+10;
