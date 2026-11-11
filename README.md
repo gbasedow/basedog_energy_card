@@ -92,3 +92,7 @@ In der schmalen vertikalen Ansicht werden Energiepfade in voneinander getrennte 
 ## Version 0.7.0
 
 Vertikale Ansicht: Geschwungene, gefüllte Sankey-Bänder mit separat zugewiesenen, nebeneinanderliegenden Startsegmenten pro Ebene. Jede Verbindung besitzt ihren eigenen Quell- und Zielbereich; die Reihenfolge bleibt hierarchisch. Beschriftungen werden nur angezeigt, wenn sie bei 12 px in den Balken passen. Horizontale Ansicht: Das Diagramm wird anhand der konfigurierten Dashboard-Rasterhöhe skaliert.
+
+## Version 0.8.0
+
+Korrektur des Sankey-Layouts: Getrennte Quellsegmente und geschwungene, gefüllte Verbindungen in beiden Ausrichtungen; Kinder erben proportionale Teilbereiche der Eltern. Neue Editoroption **Darstellung**: automatisch, immer vertikal oder immer horizontal. Die horizontale SVG wird an die konfigurierte Rasterhöhe angepasst, auch bei drei Zeilen. Die Version wird im Kartentitel angezeigt.
