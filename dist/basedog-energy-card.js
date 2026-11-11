@@ -1,55 +1,150 @@
+/* basedog_energy_card v0.2.0 */
 const TAG="basedog-energy-card";
-const defaults={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:["floor","area","entity"]};
-const safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const durationMs={minutes:60000,hours:3600000,days:86400000,weeks:604800000};
-const scale=u=>({Wh:.001,kWh:1,MWh:1000,J:1/3600000,kJ:1/3600,MJ:1/3.6})[u]??null;
-function energy(rows){if(!Array.isArray(rows)||!rows.length)return null;const valid=rows.filter(x=>x.sum!==null&&x.sum!==undefined&&Number.isFinite(Number(x.sum)));if(valid.length>1)return Math.max(0,Number(valid.at(-1).sum)-Number(valid[0].sum));const changes=rows.filter(x=>x.change!==null&&x.change!==undefined&&Number.isFinite(Number(x.change)));return changes.length?Math.max(0,changes.reduce((a,x)=>a+Number(x.change),0)):null;}
-class BasedogSankeyCard extends HTMLElement{
- constructor(){super();this.attachShadow({mode:"open"});this.config={...defaults};this.last=0;}
- setConfig(c){this.config={...defaults,...c};this.draw();this.load();}
+const ORDER=["floor","area","entity"];
+const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER]};
+const UNITS={Wh:.001,kWh:1,MWh:1000,J:1/3600000,kJ:1/3600,MJ:1/3.6};
+const DURATIONS={minutes:60000,hours:3600000,days:86400000,weeks:604800000};
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const unique=a=>[...new Set(a||[])];
+const activeLevels=c=>ORDER.filter(x=>(c.levels||ORDER).includes(x));
+const kwh=(v,unit)=>Object.hasOwn(UNITS,unit)?v*UNITS[unit]:null;
+function delta(points){
+ if(!Array.isArray(points)||!points.length)return null;
+ const sums=points.filter(p=>p.sum!=null&&Number.isFinite(Number(p.sum)));
+ if(sums.length>=2)return Math.max(0,Number(sums.at(-1).sum)-Number(sums[0].sum));
+ const changes=points.filter(p=>p.change!=null&&Number.isFinite(Number(p.change)));
+ return changes.length?Math.max(0,changes.reduce((n,p)=>n+Number(p.change),0)):null;
+}
+function normalize(c){return {...DEFAULT,...c,levels:activeLevels(c),entities:unique(c.entities),labels:unique(c.labels)};}
+function place(r,devices,areas,floors){
+ const d=devices.get(r?.device_id),a=areas.get(r?.area_id||d?.area_id);
+ const f=floors.get(a?.floor_id);
+ return {area:a?.name||"Ohne Bereich",floor:f?.name||"Ohne Etage"};
+}
+class BasedogEnergyCard extends HTMLElement{
+ constructor(){super();this.attachShadow({mode:"open"});this.config=normalize({});this.last=0;}
+ static getConfigElement(){return document.createElement("basedog-energy-card-editor");}
+ static getStubConfig(){return {...DEFAULT};}
+ setConfig(c){this.config=normalize(c);this.last=0;this.render();this.load();}
  set hass(h){this._h=h;if(Date.now()-this.last>60000)this.load();}
  getCardSize(){return 8;}
- static getConfigElement(){return document.createElement("basedog-energy-card-editor");}
- static getStubConfig(){return {...defaults};}
- async load(){const h=this._h,c=this.config;if(!h||!c.entity||this.busy)return;this.busy=true;this.last=Date.now();try{
- const end=c.time_mode==="now"?Date.now():new Date(c.end_time).getTime();if(!Number.isFinite(end))throw Error("Ungültiger Bezugszeitpunkt");
- const start=end-(Number(c.duration)||24)*(durationMs[c.duration_unit]||durationMs.hours);
- const [registry,areas,floors]=await Promise.all([h.callWS({type:"config/entity_registry/list"}),h.callWS({type:"config/area_registry/list"}),h.callWS({type:"config/floor_registry/list"}).catch(()=>[])]);
- const selected=new Set(c.entities||[]),labels=new Set(c.labels||[]);
- for(const r of registry)if(r.labels?.some(l=>labels.has(l)))selected.add(r.entity_id);
- selected.delete(c.entity);const ids=[c.entity,...selected];
- const stats=await h.callWS({type:"recorder/statistics_during_period",start_time:new Date(start).toISOString(),end_time:new Date(end).toISOString(),statistic_ids:ids,period:"hour",types:["sum","change"]});
- const vals=new Map();for(const id of ids){const v=energy(stats?.[id]),factor=scale(h.states[id]?.attributes?.unit_of_measurement);if(v!==null&&factor!==null)vals.set(id,v*factor);}
- if(!vals.has(c.entity))throw Error("Keine geeigneten Langzeitstatistiken für die zentrale Entität.");
- const areaMap=new Map(areas.map(a=>[a.area_id,a])),floorMap=new Map(floors.map(f=>[f.floor_id,f])),regMap=new Map(registry.map(r=>[r.entity_id,r]));
- const rows=[...selected].filter(id=>vals.has(id)).map(id=>{const r=regMap.get(id),a=areaMap.get(r?.area_id);return {name:h.states[id]?.attributes?.friendly_name||id,value:vals.get(id),floor:floorMap.get(a?.floor_id)?.name||"Ohne Etage",area:a?.name||"Ohne Bereich",entity:h.states[id]?.attributes?.friendly_name||id};});
- this.result={total:vals.get(c.entity),rows};this.error="";}catch(e){this.error=String(e.message||e);}finally{this.busy=false;this.draw();}}
- draw(){const c=this.config,r=this.result;const styles='<style>:host{display:block}ha-card{padding:16px;overflow:hidden}.head{display:flex;align-items:center;justify-content:space-between}button{border:0;background:none;color:inherit;cursor:pointer}.small{opacity:.7;font-size:12px}.error{color:var(--error-color,#c33)}svg{width:100%;min-width:650px}text{fill:var(--primary-text-color,currentColor);font:12px sans-serif}</style>';
- let body=!c.entity?"Zentrale Verbrauchsentität im Karteneditor auswählen.":this.error?'<p class="error">'+safe(this.error)+'</p>':r?this.diagram(r):"Lade Energieverbrauch …";
- this.shadowRoot.innerHTML=styles+'<ha-card><div class="head"><h3>'+safe(c.title)+'</h3><button id="reload" title="Aktualisieren">↻</button></div>'+body+'</ha-card>';
- this.shadowRoot.querySelector("#reload").onclick=()=>{this.last=0;this.load();};}
- diagram(r){const c=this.config,levels=c.levels||defaults.levels,groups=new Map(),total=r.total;for(const x of r.rows){let path="";for(let i=0;i<levels.length;i++){const name=x[levels[i]]||"Ohne Zuordnung";path+=levels[i]+":"+name+"/";if(!groups.has(path))groups.set(path,{id:path,name,depth:i+1,value:0,parent:i===0?"root":path.slice(0,path.lastIndexOf("/",path.length-2)+1)});groups.get(path).value+=x.value;}}
- const assigned=r.rows.reduce((a,x)=>a+x.value,0),nodes=[{id:"root",name:this._h?.states[c.entity]?.attributes?.friendly_name||c.entity,value:total,depth:0},...groups.values()];
- if(total>assigned+.0001)nodes.push({id:"other",name:"Nicht zugeordnet",value:total-assigned,depth:1,parent:"root"});
- const depth=Math.max(1,...nodes.map(n=>n.depth)),width=1000,height=Math.max(350,nodes.length*24),columns=Array.from({length:depth+1},(_,i)=>nodes.filter(n=>n.depth===i)),max=Math.max(total,...columns.map(col=>col.reduce((a,n)=>a+n.value,0)),1);
- const pos=new Map();for(let i=0;i<columns.length;i++){let y=18;for(const n of columns[i]){const hh=Math.max(5,n.value/max*(height-36));pos.set(n.id,{x:20+i*950/depth,y,h:hh});y+=hh+9;}}
- let paths="",rects="";for(const n of nodes){const p=pos.get(n.id);if(n.parent){const q=pos.get(n.parent);if(q){const sy=q.y+q.h/2,ty=p.y+p.h/2,x1=q.x+12,x2=p.x,m=(x1+x2)/2;paths+='<path d="M '+x1+' '+sy+' C '+m+' '+sy+','+m+' '+ty+','+x2+' '+ty+'" stroke="#38a7bd" stroke-opacity=".4" stroke-width="'+Math.max(2,n.value/max*(height-36))+'" fill="none"/>';}}
- rects+='<rect x="'+p.x+'" y="'+p.y+'" width="12" height="'+p.h+'" rx="2" fill="#238fa7"/><text x="'+(p.x+16)+'" y="'+(p.y+12)+'">'+safe(n.name)+' ('+n.value.toFixed(2)+' kWh)</text>';}
- return '<p class="small">Gesamt: '+total.toFixed(2)+' kWh · '+safe(c.duration)+' '+safe(c.duration_unit)+'</p>'+(assigned>total+.0001?'<p class="error">Achtung: Zugeordneter Verbrauch übersteigt den Gesamtverbrauch.</p>':"")+'<div style="overflow-x:auto"><svg viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Energie Sankey Diagramm">'+paths+rects+'</svg></div>';}
+ async load(){
+  const h=this._h,c=this.config;if(!h||!c.entity||this.busy)return;
+  this.busy=true;this.last=Date.now();
+  try{
+   const end=c.time_mode==="now"?Date.now():new Date(c.end_time).getTime();
+   if(!Number.isFinite(end))throw Error("Ungültiger Bezugszeitpunkt");
+   const start=end-(Number(c.duration)||24)*(DURATIONS[c.duration_unit]||DURATIONS.hours);
+   const [entities,devices,areas,floors]=await Promise.all([
+    h.callWS({type:"config/entity_registry/list"}),
+    h.callWS({type:"config/device_registry/list"}),
+    h.callWS({type:"config/area_registry/list"}),
+    h.callWS({type:"config/floor_registry/list"}).catch(()=>[])
+   ]);
+   const deviceMap=new Map(devices.map(d=>[d.id,d]));
+   const areaMap=new Map(areas.map(a=>[a.area_id,a]));
+   const floorMap=new Map(floors.map(f=>[f.floor_id,f]));
+   const entityMap=new Map(entities.map(e=>[e.entity_id,e]));
+   const labels=new Set(c.labels);
+   const chosen=new Set(c.entities);
+   for(const e of entities){
+    const device=deviceMap.get(e.device_id);
+    if(e.labels?.some(l=>labels.has(l))||device?.labels?.some(l=>labels.has(l)))chosen.add(e.entity_id);
+   }
+   chosen.delete(c.entity);
+   const ids=[c.entity,...chosen];
+   const energyIds=ids.filter(id=>Object.hasOwn(UNITS,h.states[id]?.attributes?.unit_of_measurement||""));
+   const excluded=[...chosen].filter(id=>!energyIds.includes(id));
+   if(!energyIds.includes(c.entity))throw Error("Die Gesamtentität benötigt eine Energieeinheit (z. B. kWh).");
+   const stats=await h.callWS({type:"recorder/statistics_during_period",start_time:new Date(start).toISOString(),end_time:new Date(end).toISOString(),statistic_ids:energyIds,period:"hour",types:["sum","change"]});
+   const values=new Map(),missing=[...excluded];
+   for(const id of energyIds){
+    const v=delta(stats?.[id]),value=v===null?null:kwh(v,h.states[id]?.attributes?.unit_of_measurement);
+    if(value===null){if(id!==c.entity)missing.push(id);}else values.set(id,value);
+   }
+   if(!values.has(c.entity))throw Error("Für den Gesamtzähler sind im Zeitraum keine Langzeitstatistiken verfügbar.");
+   const rows=[...chosen].filter(id=>values.has(id)).map(id=>{
+    const e=entityMap.get(id),p=place(e,deviceMap,areaMap,floorMap);
+    return {id,name:h.states[id]?.attributes?.friendly_name||id,value:values.get(id),...p};
+   });
+   this.result={total:values.get(c.entity),rows,missing:unique(missing),selected:chosen.size};
+   this.error="";
+  }catch(e){this.error=String(e.message||e);}
+  finally{this.busy=false;this.render();}
+ }
+ render(){
+  const c=this.config,r=this.result;
+  const css='<style>:host{display:block}ha-card{padding:16px}.head{display:flex;align-items:center;justify-content:space-between;gap:8px}.head h3{margin:4px 0 10px}button{cursor:pointer;border:0;background:transparent;color:inherit;font-size:22px}.muted{color:var(--secondary-text-color);font-size:12px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{min-width:760px;width:100%}svg text{fill:var(--primary-text-color,currentColor);font:12px sans-serif}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
+  const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
+  this.shadowRoot.innerHTML=css+'<ha-card><div class="head"><h3>'+esc(c.title)+'</h3><button title="Aktualisieren" id="reload">↻</button></div>'+body+'</ha-card>';
+  this.shadowRoot.querySelector("#reload").onclick=()=>{this.last=0;this.load();};
+ }
+ diagram(data){
+  const levels=activeLevels(this.config),nodes=[{id:"root",name:this._h?.states[this.config.entity]?.attributes?.friendly_name||this.config.entity,value:data.total,depth:0}],map=new Map();
+  for(const row of data.rows){
+   let parent="root",path="";
+   for(let i=0;i<levels.length;i++){
+    const level=levels[i],name=level==="entity"?row.name:row[level];
+    path+=JSON.stringify([level,level==="entity"?row.id:name])+"/";
+    if(!map.has(path))map.set(path,{id:path,parent,depth:i+1,name,value:0});
+    map.get(path).value+=row.value;parent=path;
+   }
+  }
+  nodes.push(...map.values());
+  const assigned=data.rows.reduce((s,x)=>s+x.value,0);
+  if(data.total>assigned+.00001)nodes.push({id:"other",parent:"root",depth:1,name:"Nicht zugeordnet",value:data.total-assigned});
+  const depth=Math.max(1,...nodes.map(n=>n.depth)),columns=Array.from({length:depth+1},(_,i)=>nodes.filter(n=>n.depth===i));
+  const height=Math.max(400,...columns.map(col=>col.length*34+35)),width=1100;
+  const pos=new Map();
+  for(let i=0;i<columns.length;i++){
+   const col=columns[i],usable=height-35-col.length*8;
+   const max=Math.max(1,...columns.map(cc=>cc.reduce((s,n)=>s+n.value,0)));
+   const weights=col.map(n=>Math.max(12,n.value/max*usable));
+   const factor=Math.min(1,usable/weights.reduce((a,b)=>a+b,0));
+   let y=15;for(let j=0;j<col.length;j++){pos.set(col[j].id,{x:15+i*990/depth,y,h:weights[j]*factor});y+=weights[j]*factor+8;}
+  }
+  let svg="";
+  for(const n of nodes.slice(1)){
+   const p=pos.get(n.id),q=pos.get(n.parent);if(!q)continue;
+   const x1=q.x+14,x2=p.x,m=(x1+x2)/2;
+   svg+='<path d="M'+x1+' '+(q.y+q.h/2)+' C'+m+' '+(q.y+q.h/2)+','+m+' '+(p.y+p.h/2)+','+x2+' '+(p.y+p.h/2)+'" fill="none" stroke="#26a4bd" stroke-opacity=".28" stroke-width="'+Math.max(2,p.h*.75)+'"/>';
+  }
+  for(const n of nodes){const p=pos.get(n.id);svg+='<rect x="'+p.x+'" y="'+p.y+'" width="14" height="'+p.h+'" rx="3" fill="#238fa7"/><text x="'+(p.x+19)+'" y="'+(p.y+Math.min(16,p.h/2+4))+'">'+esc(n.name)+' ('+n.value.toFixed(2)+' kWh)</text>';}
+  const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><p class="muted">Schaltzustände von Leuchten sind keine Verbrauchsdaten. Dafür sind Energiezähler oder berechnete Energiesensoren nötig.</p><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
+  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' ausgewählten Entitäten mit Verbrauchswerten</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Sankey-Energieverbrauch">'+svg+'</svg></div>'+missing;
+ }
 }
-class BasedogSankeyEditor extends HTMLElement{
- constructor(){super();this.attachShadow({mode:"open"});this.config={...defaults};}
- setConfig(c){this.config={...defaults,...c};this.render();}
+class BasedogEnergyEditor extends HTMLElement{
+ constructor(){super();this.attachShadow({mode:"open"});this.config=normalize({});}
+ setConfig(c){this.config=normalize(c);this.render();}
  set hass(h){this._h=h;if(!this.shadowRoot.childElementCount)this.render();}
- render(){const c=this.config,h=this._h,states=Object.values(h?.states||{}).filter(s=>scale(s.attributes?.unit_of_measurement)!==null);
- const opts=states.map(s=>'<option value="'+safe(s.entity_id)+'" '+(c.entity===s.entity_id?"selected":"")+'>'+safe(s.attributes?.friendly_name||s.entity_id)+'</option>').join("");
- const field=(name,label,value)=>'<label>'+label+'</label><input data-k="'+name+'" value="'+safe(value)+'">';
- const choices=(name,label,values)=>'<label>'+label+'</label><select data-k="'+name+'">'+values.map(([v,t])=>'<option value="'+v+'" '+(c[name]===v?"selected":"")+'>'+t+'</option>').join("")+'</select>';
- this.shadowRoot.innerHTML='<style>label{display:block;margin:12px 0 4px;font-weight:600}input,textarea,select{box-sizing:border-box;width:100%;padding:9px;border:1px solid var(--divider-color,#aaa);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222)}</style>'+field("title","Titel",c.title)+'<label>Zentrale Verbrauchsentität</label><select data-k="entity"><option value="">Auswählen</option>'+opts+'</select><label>Weitere Entitäten (eine Entity-ID pro Zeile)</label><textarea data-k="entities" rows="4">'+safe((c.entities||[]).join("\n"))+'</textarea><label>Labels (Label-IDs, eine pro Zeile)</label><textarea data-k="labels" rows="3">'+safe((c.labels||[]).join("\n"))+'</textarea>'+field("duration","Dauer",c.duration)+choices("duration_unit","Dauereinheit",[["minutes","Minuten"],["hours","Stunden"],["days","Tage"],["weeks","Wochen"]])+choices("time_mode","Bezugszeitpunkt",[["now","Jetzt"],["fixed","Fester Zeitpunkt"]])+'<label>Endzeitpunkt</label><input data-k="end_time" type="datetime-local" value="'+safe(c.end_time)+'"><label>Ebenen (Reihenfolge)</label>'+[0,1,2].map(i=>'<select data-level="'+i+'">'+["floor","area","entity"].map(v=>'<option value="'+v+'" '+(c.levels[i]===v?"selected":"")+'>'+({floor:"Etage",area:"Bereich",entity:"Entität"}[v])+'</option>').join("")+'</select>').join("");
- this.shadowRoot.querySelectorAll("[data-k]").forEach(el=>el.addEventListener("change",()=>{const k=el.dataset.k;this.config={...this.config,[k]:["entities","labels"].includes(k)?el.value.split(/[\n,]/).map(x=>x.trim()).filter(Boolean):k==="duration"?Number(el.value):el.value};this.emit();}));
- this.shadowRoot.querySelectorAll("[data-level]").forEach(el=>el.addEventListener("change",()=>{const levels=[...this.config.levels];levels[Number(el.dataset.level)]=el.value;if(new Set(levels).size!==3){this.render();return;}this.config={...this.config,levels};this.emit();}));}
+ render(){
+  const c=this.config,h=this._h,states=Object.values(h?.states||{}).filter(s=>Object.hasOwn(UNITS,s.attributes?.unit_of_measurement||""));
+  const options=states.map(s=>'<option value="'+esc(s.entity_id)+'" '+(c.entity===s.entity_id?"selected":"")+'>'+esc(s.attributes?.friendly_name||s.entity_id)+'</option>').join("");
+  const input=(key,title,value,type="text")=>'<label>'+title+'</label><input data-key="'+key+'" type="'+type+'" value="'+esc(value)+'">';
+  const select=(key,title,opts)=>'<label>'+title+'</label><select data-key="'+key+'">'+opts.map(([v,t])=>'<option value="'+v+'" '+(c[key]===v?"selected":"")+'>'+t+'</option>').join("")+'</select>';
+  this.shadowRoot.innerHTML='<style>label{display:block;margin:12px 0 4px;font-weight:600}input,textarea,select{box-sizing:border-box;width:100%;padding:9px;border:1px solid var(--divider-color,#aaa);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222)}.check{display:flex;gap:10px;align-items:center;font-weight:400}.check input{width:auto}.hint{font-size:12px;color:var(--secondary-text-color)}</style>'+
+   input("title","Titel",c.title)+'<label>Zentrale Energieentität</label><select data-key="entity"><option value="">Auswählen</option>'+options+'</select>'+
+   '<label>Weitere Entitäten (eine ID pro Zeile)</label><textarea data-key="entities" rows="4">'+esc(c.entities.join("\n"))+'</textarea>'+
+   '<label>Labels (eine Label-ID pro Zeile)</label><textarea data-key="labels" rows="3">'+esc(c.labels.join("\n"))+'</textarea>'+
+   input("duration","Dauer",c.duration,"number")+
+   select("duration_unit","Einheit",[["minutes","Minuten"],["hours","Stunden"],["days","Tage"],["weeks","Wochen"]])+
+   select("time_mode","Bezugszeitpunkt",[["now","Jetzt"],["fixed","Fester Zeitpunkt"]])+
+   input("end_time","Fester Endzeitpunkt",c.end_time,"datetime-local")+
+   '<label>Strukturierung</label><p class="hint">Ebenen einzeln ein- oder ausschalten. Die Reihenfolge ist immer Etage → Bereich → Entität.</p>'+
+   ORDER.map(k=>'<label class="check"><input type="checkbox" data-level="'+k+'" '+(c.levels.includes(k)?"checked":"")+'>'+({floor:"Etage",area:"Bereich",entity:"Entität"}[k])+'</label>').join("");
+  this.shadowRoot.querySelectorAll("[data-key]").forEach(el=>el.addEventListener("change",()=>{
+   const k=el.dataset.key,v=["entities","labels"].includes(k)?el.value.split(/[\n,]/).map(x=>x.trim()).filter(Boolean):k==="duration"?Number(el.value):el.value;
+   this.config={...this.config,[k]:v};this.emit();
+  }));
+  this.shadowRoot.querySelectorAll("[data-level]").forEach(el=>el.addEventListener("change",()=>{
+   const levels=new Set(this.config.levels);if(el.checked)levels.add(el.dataset.level);else levels.delete(el.dataset.level);
+   this.config={...this.config,levels:ORDER.filter(k=>levels.has(k))};this.emit();
+  }));
+ }
  emit(){this.dispatchEvent(new CustomEvent("config-changed",{detail:{config:this.config},bubbles:true,composed:true}));}
 }
-if(!customElements.get(TAG))customElements.define(TAG,BasedogSankeyCard);
-if(!customElements.get("basedog-energy-card-editor"))customElements.define("basedog-energy-card-editor",BasedogSankeyEditor);
-window.customCards=window.customCards||[];window.customCards.push({type:TAG,name:"basedog_energy_card",description:"Sankey-Energieverbrauch nach Etage, Bereich und Entität"});
+if(!customElements.get(TAG))customElements.define(TAG,BasedogEnergyCard);
+if(!customElements.get("basedog-energy-card-editor"))customElements.define("basedog-energy-card-editor",BasedogEnergyEditor);
+window.customCards=window.customCards||[];
+if(!window.customCards.some(x=>x.type===TAG))window.customCards.push({type:TAG,name:"basedog_energy_card",description:"Energie-Sankey nach Etage, Bereich und Entität"});
