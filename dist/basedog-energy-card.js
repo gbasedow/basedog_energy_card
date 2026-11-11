@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.8.0 */
-const CARD_VERSION="0.8.0";
+/* basedog_energy_card v0.9.0 */
+const CARD_VERSION="0.9.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto"};
@@ -91,106 +91,104 @@ class BasedogEnergyCard extends HTMLElement{
  }
  diagram(data){
   const levels=activeLevels(this.config),vertical=this.vertical,showLabels=this.config.show_labels!==false;
-  const nodes=[{id:"root",name:this._h?.states[this.config.entity]?.attributes?.friendly_name||this.config.entity,value:data.total,depth:0}],map=new Map();
+  const root={id:"root",name:this._h?.states[this.config.entity]?.attributes?.friendly_name||this.config.entity,value:Math.max(0,data.total),depth:0};
+  const nodes=[root],byId=new Map([["root",root]]),children=new Map(),map=new Map();
   for(const row of data.rows){
+   if(!(row.value>0))continue;
    let parent="root",path="";
    for(let i=0;i<levels.length;i++){
     const level=levels[i],name=level==="entity"?row.name:row[level];
     path+=JSON.stringify([level,level==="entity"?row.id:name])+"/";
-    if(!map.has(path))map.set(path,{id:path,parent,depth:i+1,name,value:0});
+    if(!map.has(path)){
+     const n={id:path,parent,depth:i+1,name,value:0};
+     map.set(path,n);nodes.push(n);byId.set(path,n);
+     if(!children.has(parent))children.set(parent,[]);
+     children.get(parent).push(n);
+    }
     map.get(path).value+=row.value;parent=path;
    }
   }
-  nodes.push(...map.values());
-  const assigned=data.rows.reduce((s,x)=>s+x.value,0);
-  if(data.total>assigned+.00001)nodes.push({id:"other",parent:"root",depth:1,name:"Nicht zugeordnet",value:data.total-assigned});
+  const assigned=data.rows.reduce((s,x)=>s+Math.max(0,x.value),0);
+  if(data.total>assigned+0.00001){
+   const n={id:"other",parent:"root",depth:1,name:"Nicht erfasster Verbrauch",value:data.total-assigned};
+   nodes.push(n);byId.set(n.id,n);
+   if(!children.has("root"))children.set("root",[]);
+   children.get("root").push(n);
+  }
   const depth=Math.max(1,...nodes.map(n=>n.depth));
-  const columns=Array.from({length:depth+1},(_,i)=>nodes.filter(n=>n.depth===i));
-  const max=Math.max(0.001,data.total,assigned);
-  const pos=new Map();
-  let width,height,paths="",bars="",headers="";
-  const tip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
-  if(vertical){
-   // Hierarchical Sankey: each parent distributes outgoing flow over disjoint
-   // adjacent source slots. Every link has its own source AND destination slot.
-   // The ribbon edges are curved, and sibling links never share a start point.
-   width=360;
-   const left=15,usable=330,levelGap=155,barHeight=17;
-   height=(depth+1)*levelGap+35;
-   const children=new Map(),byId=new Map(nodes.map(n=>[n.id,n]));
-   for(const n of nodes.slice(1)){if(!children.has(n.parent))children.set(n.parent,[]);children.get(n.parent).push(n);}
-   // Stable depth-first order makes the source and target order consistent.
-   // Reserve independent, proportional lanes at every depth. Children inherit
-   // the parent's precise interval; the remainder stays unused rather than
-   // being falsely represented as a child flow.
-   const assign=(id,x,w)=>{
-    const n=byId.get(id);if(!n)return;
-    pos.set(id,{x,y:35+n.depth*levelGap,w,h:barHeight});
-    const kids=children.get(id)||[];
-    const parentValue=Math.max(.000001,n.value);
-    let next=x;
-    for(const child of kids){
-     const cw=Math.min(Math.max(0,w-(next-x)),w*Math.max(0,child.value)/parentValue);
-     assign(child.id,next,cw);
-     next+=cw;
+  // Keep siblings together and put the residual last, like the native HA chart.
+  for(const list of children.values())list.sort((a,b)=>(a.id==="other"?1:0)-(b.id==="other"?1:0));
+  const rank=new Map(),walk=id=>{for(const n of children.get(id)||[]){rank.set(n.id,rank.size);walk(n.id);}};
+  walk("root");
+  const columns=Array.from({length:depth+1},(_,i)=>nodes.filter(n=>n.depth===i).sort((a,b)=>(rank.get(a.id)??-1)-(rank.get(b.id)??-1)));
+  const max=Math.max(.001,root.value,assigned);
+  const viewWidth=vertical?360:Math.max(850,this.cardWidth||850);
+  const viewHeight=vertical?Math.max(440,depth*155+100):Math.max(260,(Number(this.config.grid_options?.rows)||8)*56-120);
+  const breadth=vertical?viewWidth:viewHeight;
+  const breadthStart=vertical?14:20,breadthEnd=vertical?14:20;
+  const gap=6,nodeThickness=vertical?15:14;
+  const layout=new Map(),scale=Math.min(...columns.map(col=>(breadth-breadthStart-breadthEnd-gap*(col.length-1))/Math.max(.001,col.reduce((s,n)=>s+Math.max(0,n.value),0))));
+  const safeScale=Math.max(.01,scale);
+  // Every column uses the same value-to-pixel scale; node gaps fan out branches.
+  for(let i=0;i<columns.length;i++){
+   const col=columns[i],totalSize=col.reduce((s,n)=>s+Math.max(0,n.value)*safeScale,0)+Math.max(0,col.length-1)*gap;
+   let cursor=breadthStart+Math.max(0,(breadth-breadthStart-breadthEnd-totalSize)/2);
+   for(const n of col){
+    const span=Math.max(.1,n.value*safeScale);
+    const levelPos=vertical?34+i*155:20+i*(viewWidth-55-nodeThickness)/Math.max(1,depth);
+    layout.set(n.id,{x:vertical?cursor:levelPos,y:vertical?levelPos:cursor,w:vertical?span:nodeThickness,h:vertical?nodeThickness:span,span});
+    cursor+=span+gap;
+   }
+  }
+  const tooltip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
+  const outgoing=new Map(),incoming=new Map();
+  let paths="",bars="",labels="";
+  for(const n of nodes.slice(1)){
+   const p=layout.get(n.id),q=layout.get(n.parent);
+   if(!p||!q||n.value<=0)continue;
+   const flow=n.value*safeScale;
+   const sourceOffset=outgoing.get(n.parent)||0,targetOffset=incoming.get(n.id)||0;
+   outgoing.set(n.parent,sourceOffset+flow);incoming.set(n.id,targetOffset+flow);
+   let d;
+   if(vertical){
+    const x1=q.x+sourceOffset,x2=p.x+targetOffset,y1=q.y+q.h,y2=p.y,cy=y1+(y2-y1)*.5;
+    d='M'+x1+' '+y1+' C'+x1+' '+cy+','+x2+' '+cy+','+x2+' '+y2+
+      ' L'+(x2+flow)+' '+y2+' C'+(x2+flow)+' '+cy+','+(x1+flow)+' '+cy+','+(x1+flow)+' '+y1+' Z';
+   }else{
+    const y1=q.y+sourceOffset,y2=p.y+targetOffset,x1=q.x+q.w,x2=p.x,cx=x1+(x2-x1)*.5;
+    d='M'+x1+' '+y1+' C'+cx+' '+y1+','+cx+' '+y2+','+x2+' '+y2+
+      ' L'+x2+' '+(y2+flow)+' C'+cx+' '+(y2+flow)+','+cx+' '+(y1+flow)+','+x1+' '+(y1+flow)+' Z';
+   }
+   paths+='<path class="sankey-hover" data-tip="'+tooltip(n)+'" d="'+d+'" fill="#26a4bd" fill-opacity=".38"><title>'+tooltip(n)+'</title></path>';
+   // Label inside the ribbon, only if it remains legible at the rendered scale.
+   const text=n.name+' · '+n.value.toFixed(2)+' kWh',needed=text.length*6.5+10;
+   const physicalFlow=flow*(vertical?Math.min(1,(this.cardWidth||360)/viewWidth):1);
+   const run=vertical?155-nodeThickness:(viewWidth-55)/Math.max(1,depth)-nodeThickness;
+   if(showLabels&&physicalFlow>=14&&run>=needed){
+    const px=vertical?p.x+p.w/2:q.x+q.w+run/2;
+    const py=vertical?q.y+q.h+run/2:p.y+p.h/2+4;
+    labels+='<text class="flow-label" x="'+px+'" y="'+py+'" text-anchor="middle" font-size="12" '+(vertical?'transform="rotate(-90 '+px+' '+py+')"':'')+'>'+esc(text)+'</text>';
+   }
+  }
+  const actualScale=vertical?Math.min(1,(this.cardWidth||360)/viewWidth):Math.min(1,(this.cardWidth||viewWidth)/viewWidth);
+  for(const n of nodes){
+   const p=layout.get(n.id);if(!p)continue;
+   bars+='<rect class="sankey-hover" data-tip="'+tooltip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="2" fill="'+(n.id==="other"?"#aaaaaa":"#168faf")+'"><title>'+tooltip(n)+'</title></rect>';
+   const name=n.name+'\n'+n.value.toFixed(2)+' kWh',longest=Math.max(n.name.length*6.4,n.value.toFixed(2).length*6.4+27);
+   const available=vertical?p.w:p.h;
+   // Native chart uses a per-node font fit. Never render below 10 CSS pixels.
+   if(showLabels&&available*actualScale>=longest*actualScale+6&&actualScale*12>=10){
+    if(vertical){
+     const x=p.x+p.w/2,y=p.y+30;
+     labels+='<text x="'+x+'" y="'+y+'" text-anchor="middle" font-size="12">'+esc(n.name)+'</text><text x="'+x+'" y="'+(y+14)+'" text-anchor="middle" font-size="12">'+n.value.toFixed(2)+' kWh</text>';
+    }else{
+     const x=p.x+p.w+5,y=p.y+p.h/2;
+     labels+='<text x="'+x+'" y="'+y+'" font-size="12">'+esc(n.name)+'</text><text x="'+x+'" y="'+(y+14)+'" font-size="12">'+n.value.toFixed(2)+' kWh</text>';
     }
-   };
-   assign("root",left,usable);
-   for(let i=0;i<columns.length;i++)
-    headers+='<text x="15" y="'+(21+i*levelGap)+'" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>';
-   // The slot begins at the parent's running outgoing offset, not its center.
-   const outgoing=new Map();
-   for(const n of nodes.slice(1)){
-    const p=pos.get(n.id),q=pos.get(n.parent);if(!p||!q||p.w<=0)continue;
-    const slot=outgoing.get(n.parent)||0;
-    const sourceLeft=q.x+slot,sourceRight=sourceLeft+p.w;
-    outgoing.set(n.parent,slot+p.w);
-    const targetLeft=p.x,targetRight=p.x+p.w;
-    const y1=q.y+q.h,y2=p.y,mid=(y1+y2)/2;
-    const d='M'+sourceLeft+' '+y1+
-      ' C'+sourceLeft+' '+mid+','+targetLeft+' '+mid+','+targetLeft+' '+y2+
-      ' L'+targetRight+' '+y2+
-      ' C'+targetRight+' '+mid+','+sourceRight+' '+mid+','+sourceRight+' '+y1+' Z';
-    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="#26a4bd" fill-opacity=".32" stroke="none"><title>'+tip(n)+'</title></path>';
    }
-   for(const n of nodes){
-    const p=pos.get(n.id);if(!p||p.w<=0)continue;
-    bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="1" fill="#238fa7"><title>'+tip(n)+'</title></rect>';
-    const label=n.name+' · '+n.value.toFixed(2)+' kWh';
-    if(showLabels&&p.w>=label.length*6.7+10)
-     bars+='<text x="'+(p.x+p.w/2)+'" y="'+(p.y+12)+'" text-anchor="middle" font-size="12">'+esc(label)+'</text>';
-   }
-  }else{
-   const maxLabel=Math.max(16,...nodes.map(n=>n.name.length));
-   const columnWidth=Math.max(300,Math.min(760,maxLabel*7.4+95));
-   height=Math.max(420,...columns.map(col=>col.length*39+50));
-   width=(depth+1)*columnWidth+35;
-   for(let i=0;i<columns.length;i++){
-    const col=columns[i],space=height-48-col.length*9;
-    const weights=col.map(n=>Math.max(15,n.value/max*space));
-    const factor=Math.min(1,space/Math.max(1,weights.reduce((a,b)=>a+b,0)));
-    let y=20;
-    for(const n of col){const h=Math.max(1,weights[col.indexOf(n)]*factor);pos.set(n.id,{x:15+i*columnWidth,y,w:16,h});y+=h+9;}
-    headers+='<text x="'+(15+i*columnWidth)+'" y="13" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>';
-   }
-   // Separate source/target ports avoid drawing all paths from a shared center.
-   const outgoing=new Map();
-   for(const n of nodes.slice(1)){
-    const p=pos.get(n.id),q=pos.get(n.parent);if(!p||!q)continue;
-    const siblings=nodes.filter(x=>x.parent===n.parent);
-    const total=siblings.reduce((s,x)=>s+Math.max(0,x.value),0);
-    const slot=outgoing.get(n.parent)||0;
-    const sourceH=Math.max(0,Math.min(q.h-slot,q.h*Math.max(0,n.value)/Math.max(total,.000001)));
-    const sy=q.y+slot,ty=p.y,th=p.h,x1=q.x+q.w,x2=p.x,m=(x1+x2)/2;
-    outgoing.set(n.parent,slot+sourceH);
-    const d='M'+x1+' '+sy+' C'+m+' '+sy+','+m+' '+ty+','+x2+' '+ty+
-     ' L'+x2+' '+(ty+th)+' C'+m+' '+(ty+th)+','+m+' '+(sy+sourceH)+','+x1+' '+(sy+sourceH)+' Z';
-    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="#26a4bd" fill-opacity=".32" stroke="none"><title>'+tip(n)+'</title></path>';
-   }
-   for(const n of nodes){const p=pos.get(n.id);bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="3" fill="#238fa7"><title>'+tip(n)+'</title></rect>';if(showLabels)bars+='<text x="'+(p.x+22)+'" y="'+(p.y+Math.min(16,p.h/2+4))+'">'+esc(n.name)+'</text>';}
   }
   const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
-  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · '+(vertical?"Vertikale Ansicht":"Horizontale Ansicht")+'</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg style="display:block;width:100%;height:auto;max-width:100%;overflow:hidden" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Sankey-Energieverbrauch">'+headers+paths+bars+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
+  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · '+(vertical?"Vertikale Ansicht":"Horizontale Ansicht")+'</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg style="display:block;width:100%;height:auto;max-width:100%;overflow:hidden" viewBox="0 0 '+viewWidth+' '+viewHeight+'" role="img" aria-label="Sankey-Energieverbrauch">'+paths+bars+labels+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
 }
 class BasedogEnergyEditor extends HTMLElement{
