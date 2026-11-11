@@ -80,3 +80,7 @@ Das Sankey-Diagramm wechselt bei einer Kartenbreite unter 700 CSS-Pixeln automat
 ## Version 0.5.1
 
 Die vertikale Smartphone-Darstellung nutzt nun eine schmale SVG-Zeichenfläche mit einer Höhe, die automatisch mit der Anzahl der Energie-Entitäten wächst. Jede Entität erhält eine eigene Zeile mit lesbarer Beschriftung; die vorherige starke Verkleinerung des Diagramms entfällt. Horizontale Ansicht, Tooltips und der Beschriftungsschalter bleiben erhalten.
+
+## Version 0.6.0
+
+Mobile Sankey-Ansicht: Neu angeordnete Hierarchie nach Vorfahren, vertikale Ebenen mit getrennten Zeilen für jeden Knoten, proportionale Balken und Flussverbindungen, vollständige Beschriftung mit kWh-Wert. Die Höhe wächst mit der Knotenzahl. Desktopansicht, Hover-Tooltips und der Beschriftungsschalter bleiben bestehen.
