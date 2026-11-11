@@ -1,0 +1,7 @@
+{
+  "name": "basedog_sankey_card",
+  "content_in_root": false,
+  "filename": "basedog-sankey-card.js",
+  "render_readme": true,
+  "homeassistant": "2024.6.0"
+}
