@@ -84,3 +84,7 @@ Die vertikale Smartphone-Darstellung nutzt nun eine schmale SVG-Zeichenfläche m
 ## Version 0.6.0
 
 Mobile Sankey-Ansicht: Neu angeordnete Hierarchie nach Vorfahren, vertikale Ebenen mit getrennten Zeilen für jeden Knoten, proportionale Balken und Flussverbindungen, vollständige Beschriftung mit kWh-Wert. Die Höhe wächst mit der Knotenzahl. Desktopansicht, Hover-Tooltips und der Beschriftungsschalter bleiben bestehen.
+
+## Version 0.6.1
+
+In der schmalen vertikalen Ansicht werden Energiepfade in voneinander getrennte Breitenintervalle aufgeteilt. Die Verbindungen verlaufen parallel ohne Überlagerung. Beschriftungen werden innerhalb des Balkens dargestellt, wenn sie bei mindestens 12 px Schriftgröße vollständig hineinpassen; andernfalls bleiben sie ausgeblendet und sind per Tooltip verfügbar.
