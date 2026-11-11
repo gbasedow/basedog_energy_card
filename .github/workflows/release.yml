@@ -1,0 +1,18 @@
+name: Release basedog_energy_card
+on:
+  push:
+    paths:
+      - VERSION
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(cat VERSION)"
+          gh release create "v${VERSION}" dist/basedog-energy-card.js --title "basedog_energy_card v${VERSION}" --notes "Optional hierarchy levels (floor, area, entity); device-inherited area/floor resolution; missing-energy diagnostics." --target "${GITHUB_SHA}" || gh release upload "v${VERSION}" dist/basedog-energy-card.js --clobber
