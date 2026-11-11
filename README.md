@@ -88,3 +88,7 @@ Mobile Sankey-Ansicht: Neu angeordnete Hierarchie nach Vorfahren, vertikale Eben
 ## Version 0.6.1
 
 In der schmalen vertikalen Ansicht werden Energiepfade in voneinander getrennte Breitenintervalle aufgeteilt. Die Verbindungen verlaufen parallel ohne Überlagerung. Beschriftungen werden innerhalb des Balkens dargestellt, wenn sie bei mindestens 12 px Schriftgröße vollständig hineinpassen; andernfalls bleiben sie ausgeblendet und sind per Tooltip verfügbar.
+
+## Version 0.7.0
+
+Vertikale Ansicht: Geschwungene, gefüllte Sankey-Bänder mit separat zugewiesenen, nebeneinanderliegenden Startsegmenten pro Ebene. Jede Verbindung besitzt ihren eigenen Quell- und Zielbereich; die Reihenfolge bleibt hierarchisch. Beschriftungen werden nur angezeigt, wenn sie bei 12 px in den Balken passen. Horizontale Ansicht: Das Diagramm wird anhand der konfigurierten Dashboard-Rasterhöhe skaliert.
