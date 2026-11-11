@@ -1,8 +1,8 @@
-/* basedog_energy_card v0.9.0 */
-const CARD_VERSION="0.9.0";
+/* basedog_energy_card v0.10.0 */
+const CARD_VERSION="0.10.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
-const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto"};
+const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto",group_below_kwh:0};
 const UNITS={Wh:.001,kWh:1,MWh:1000,J:1/3600000,kJ:1/3600,MJ:1/3.6};
 const DURATIONS={minutes:60000,hours:3600000,days:86400000,weeks:604800000};
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -93,7 +93,16 @@ class BasedogEnergyCard extends HTMLElement{
   const levels=activeLevels(this.config),vertical=this.vertical,showLabels=this.config.show_labels!==false;
   const root={id:"root",name:this._h?.states[this.config.entity]?.attributes?.friendly_name||this.config.entity,value:Math.max(0,data.total),depth:0};
   const nodes=[root],byId=new Map([["root",root]]),children=new Map(),map=new Map();
+  const threshold=Math.max(0,Number(this.config.group_below_kwh)||0),small=new Map(),rows=[];
   for(const row of data.rows){
+   if(row.value>0&&threshold>0&&row.value<threshold){
+    const key=JSON.stringify(levels.filter(x=>x!=="entity").map(x=>row[x]));
+    if(!small.has(key))small.set(key,{...row,id:"group:"+key,name:"Zusammengefasst",value:0});
+    small.get(key).value+=row.value;
+   }else rows.push(row);
+  }
+  rows.push(...small.values());
+  for(const row of rows){
    if(!(row.value>0))continue;
    let parent="root",path="";
    for(let i=0;i<levels.length;i++){
@@ -140,6 +149,15 @@ class BasedogEnergyCard extends HTMLElement{
     cursor+=span+gap;
    }
   }
+  // Match the native energy Sankey theme colors (--graph-color-N).
+  const styles=getComputedStyle(this),palette=Array.from({length:54},(_,i)=>styles.getPropertyValue("--graph-color-"+(i+1)).trim()||styles.getPropertyValue("--color-"+(i+1)).trim());
+  const primary=styles.getPropertyValue("--primary-color").trim()||"#03a9f4";
+  const gray=styles.getPropertyValue("--state-unavailable-color").trim()||"#bdbdbd";
+  const nodeColor=new Map([["root",primary]]);let colorIndex=0;
+  for(const n of nodes.slice(1)){
+   nodeColor.set(n.id,n.id==="other"||n.name==="Zusammengefasst"?gray:n.depth===depth?(palette[colorIndex++%54]||primary):(nodeColor.get(n.parent)||primary));
+  }
+  const color=n=>nodeColor.get(n.id)||primary;
   const tooltip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
   const outgoing=new Map(),incoming=new Map();
   let paths="",bars="",labels="";
@@ -159,7 +177,7 @@ class BasedogEnergyCard extends HTMLElement{
     d='M'+x1+' '+y1+' C'+cx+' '+y1+','+cx+' '+y2+','+x2+' '+y2+
       ' L'+x2+' '+(y2+flow)+' C'+cx+' '+(y2+flow)+','+cx+' '+(y1+flow)+','+x1+' '+(y1+flow)+' Z';
    }
-   paths+='<path class="sankey-hover" data-tip="'+tooltip(n)+'" d="'+d+'" fill="#26a4bd" fill-opacity=".38"><title>'+tooltip(n)+'</title></path>';
+   paths+='<path class="sankey-hover" data-tip="'+tooltip(n)+'" d="'+d+'" fill="'+esc(color(n))+'" fill-opacity=".4"><title>'+tooltip(n)+'</title></path>';
    // Label inside the ribbon, only if it remains legible at the rendered scale.
    const text=n.name+' · '+n.value.toFixed(2)+' kWh',needed=text.length*6.5+10;
    const physicalFlow=flow*(vertical?Math.min(1,(this.cardWidth||360)/viewWidth):1);
@@ -173,7 +191,7 @@ class BasedogEnergyCard extends HTMLElement{
   const actualScale=vertical?Math.min(1,(this.cardWidth||360)/viewWidth):Math.min(1,(this.cardWidth||viewWidth)/viewWidth);
   for(const n of nodes){
    const p=layout.get(n.id);if(!p)continue;
-   bars+='<rect class="sankey-hover" data-tip="'+tooltip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="2" fill="'+(n.id==="other"?"#aaaaaa":"#168faf")+'"><title>'+tooltip(n)+'</title></rect>';
+   bars+='<rect class="sankey-hover" data-tip="'+tooltip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="2" fill="'+esc(color(n))+'"><title>'+tooltip(n)+'</title></rect>';
    const name=n.name+'\n'+n.value.toFixed(2)+' kWh',longest=Math.max(n.name.length*6.4,n.value.toFixed(2).length*6.4+27);
    const available=vertical?p.w:p.h;
    // Native chart uses a per-node font fit. Never render below 10 CSS pixels.
@@ -205,6 +223,7 @@ class BasedogEnergyEditor extends HTMLElement{
    '<label>Weitere Entitäten (eine ID pro Zeile)</label><textarea data-key="entities" rows="4">'+esc(c.entities.join("\n"))+'</textarea>'+
    '<label>Labels (eine Label-ID pro Zeile)</label><textarea data-key="labels" rows="3">'+esc(c.labels.join("\n"))+'</textarea>'+
    input("duration","Dauer",c.duration,"number")+
+   input("group_below_kwh","Verbräuche unter (kWh) zusammenfassen, 0 = aus",c.group_below_kwh||0,"number")+
    select("duration_unit","Einheit",[["minutes","Minuten"],["hours","Stunden"],["days","Tage"],["weeks","Wochen"]])+
    select("orientation","Darstellung",[[ "auto","Automatisch nach Breite"],["vertical","Immer vertikal"],["horizontal","Immer horizontal"]])+
    select("time_mode","Bezugszeitpunkt",[["now","Jetzt"],["fixed","Fester Zeitpunkt"]])+
@@ -213,7 +232,7 @@ class BasedogEnergyEditor extends HTMLElement{
    '<label>Strukturierung</label><p class="hint">Ebenen einzeln ein- oder ausschalten. Die Reihenfolge ist immer Etage → Bereich → Entität.</p>'+
    ORDER.map(k=>'<label class="check"><input type="checkbox" data-level="'+k+'" '+(c.levels.includes(k)?"checked":"")+'>'+({floor:"Etage",area:"Bereich",entity:"Entität"}[k])+'</label>').join("");
   this.shadowRoot.querySelectorAll("[data-key]").forEach(el=>el.addEventListener("change",()=>{
-   const k=el.dataset.key,v=["entities","labels"].includes(k)?el.value.split(/[\n,]/).map(x=>x.trim()).filter(Boolean):k==="duration"?Number(el.value):el.value;
+   const k=el.dataset.key,v=["entities","labels"].includes(k)?el.value.split(/[\n,]/).map(x=>x.trim()).filter(Boolean):["duration","group_below_kwh"].includes(k)?Number(el.value):el.value;
    this.config={...this.config,[k]:v};this.emit();
   }));
   this.shadowRoot.querySelector("[data-show-labels]").addEventListener("change",el=>{this.config={...this.config,show_labels:el.target.checked};this.emit();});
