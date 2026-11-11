@@ -72,3 +72,7 @@ Die Versionsnummer wird direkt oben im visuellen Karteneditor und in der Karte a
 ## Version 0.4.0
 
 Die Hierarchiespalten werden unabhängig von der Kartenbreite vollständig gerendert. Auf schmalen Bildschirmen kann horizontal gescrollt werden. Beim Überfahren eines Balkens oder Verbindungswegs mit der Maus erscheint ein Tooltip mit dem Namen und dem Energieverbrauch in kWh. Die Versionsnummer wird weiterhin im Karteneditor angezeigt.
+
+## Version 0.5.0
+
+Das Sankey-Diagramm wechselt bei einer Kartenbreite unter 700 CSS-Pixeln automatisch in eine vertikale Darstellung (oben nach unten); ab 700 Pixeln wird es horizontal (links nach rechts) dargestellt. Ein ResizeObserver reagiert auch auf Änderungen der Kartenbreite durch Bildschirmrotation. Die SVG-Grafik wird auf die Kartenbreite skaliert. Der neue Schalter **Beschriftungen im Diagramm anzeigen** im visuellen Editor steuert `show_labels` (Standard: `true`). Die Hover-Tooltips bleiben unabhängig von diesem Schalter verfügbar.
