@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.11.0 */
-const CARD_VERSION="0.11.0";
+/* basedog_energy_card v0.12.0 */
+const CARD_VERSION="0.12.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto",group_below_kwh:0};
@@ -119,14 +119,20 @@ class BasedogEnergyCard extends HTMLElement{
   }
   const assigned=data.rows.reduce((s,x)=>s+Math.max(0,x.value),0);
   if(data.total>assigned+0.00001){
-   const n={id:"other",parent:"root",depth:1,name:"Nicht erfasster Verbrauch",value:data.total-assigned};
-   nodes.push(n);byId.set(n.id,n);
-   if(!children.has("root"))children.set("root",[]);
-   children.get("root").push(n);
+   // Pass-through chain: the residual must span EVERY depth like the
+   // native HA Sankey's generated pass-through nodes, without counting twice.
+   let parent="root";
+   for(let i=1;i<=levels.length;i++){
+    const n={id:"other:"+i,parent,depth:i,name:"Nicht erfasster Verbrauch",value:data.total-assigned,residual:true};
+    nodes.push(n);byId.set(n.id,n);
+    if(!children.has(parent))children.set(parent,[]);
+    children.get(parent).push(n);
+    parent=n.id;
+   }
   }
   const depth=Math.max(1,...nodes.map(n=>n.depth));
   // Keep siblings together and put the residual last, like the native HA chart.
-  for(const list of children.values())list.sort((a,b)=>(a.id==="other"?1:0)-(b.id==="other"?1:0));
+  for(const list of children.values())list.sort((a,b)=>(a.residual?1:0)-(b.residual?1:0));
   const rank=new Map(),walk=id=>{for(const n of children.get(id)||[]){rank.set(n.id,rank.size);walk(n.id);}};
   walk("root");
   const columns=Array.from({length:depth+1},(_,i)=>nodes.filter(n=>n.depth===i).sort((a,b)=>(rank.get(a.id)??-1)-(rank.get(b.id)??-1)));
@@ -156,7 +162,7 @@ class BasedogEnergyCard extends HTMLElement{
   const gray=styles.getPropertyValue("--state-unavailable-color").trim()||"#bdbdbd";
   const nodeColor=new Map([["root",primary]]);let colorIndex=0;
   for(const n of nodes.slice(1)){
-   nodeColor.set(n.id,n.id==="other"||n.name==="Zusammengefasst"?gray:n.depth===1?homeColor:n.depth===depth?(palette[colorIndex++%54]||homeColor):(nodeColor.get(n.parent)||homeColor));
+   nodeColor.set(n.id,n.residual||n.name==="Zusammengefasst"?gray:n.depth===1?homeColor:n.depth===depth?(palette[colorIndex++%54]||homeColor):(nodeColor.get(n.parent)||homeColor));
   }
   const color=n=>nodeColor.get(n.id)||primary;
   const tooltip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
