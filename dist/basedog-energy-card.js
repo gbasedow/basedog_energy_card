@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.5.1 */
-const CARD_VERSION="0.5.1";
+/* basedog_energy_card v0.6.0 */
+const CARD_VERSION="0.6.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true};
@@ -105,57 +105,65 @@ class BasedogEnergyCard extends HTMLElement{
   if(data.total>assigned+.00001)nodes.push({id:"other",parent:"root",depth:1,name:"Nicht zugeordnet",value:data.total-assigned});
   const depth=Math.max(1,...nodes.map(n=>n.depth));
   const columns=Array.from({length:depth+1},(_,i)=>nodes.filter(n=>n.depth===i));
-  // A generous, measured column width keeps full labels inside the SVG viewport.
-  const maxLabel=Math.max(16,...nodes.map(n=>n.name.length));
-  const columnWidth=Math.max(300,Math.min(760,maxLabel*7.4+95));
-  const horizontalHeight=Math.max(420,...columns.map(col=>col.length*39+50));
-  // Mobile: keep the viewBox narrow and grow vertically with the number of entities.
-  // This avoids scaling 43 nodes into a few unreadable pixels.
-  const mobileWidth=360,mobileRowHeight=48,mobileSectionGap=72;
-  const sectionStarts=[];
-  let sectionY=20;
-  for(const col of columns){sectionStarts.push(sectionY);sectionY+=Math.max(1,col.length)*mobileRowHeight+mobileSectionGap;}
-  const width=vertical?mobileWidth:(depth+1)*columnWidth+35;
-  const height=vertical?sectionY+15:horizontalHeight;
-  const pos=new Map(),max=Math.max(1,...columns.map(cc=>cc.reduce((s,n)=>s+n.value,0)));
-  for(let i=0;i<columns.length;i++){
-   const col=columns[i];
-   if(vertical){
+  const max=Math.max(0.001,data.total,assigned);
+  const pos=new Map();
+  let width,height,paths="",bars="",headers="";
+  const tip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
+  if(vertical){
+   // Arrange nodes by ancestry, with separate label rows and actual flow-width ribbons.
+   // A fixed 360-unit canvas remains readable at phone width; height grows as needed.
+   width=360;
+   const children=new Map();
+   for(const n of nodes.slice(1)){if(!children.has(n.parent))children.set(n.parent,[]);children.get(n.parent).push(n);}
+   const ordered=[];
+   const walk=id=>{for(const n of children.get(id)||[]){ordered.push(n);walk(n.id);}};
+   walk("root");
+   const order=new Map(ordered.map((n,i)=>[n.id,i]));
+   const rowHeight=54,gap=92,starts=[];
+   let cursor=18;
+   for(const col of columns){starts.push(cursor);cursor+=Math.max(1,col.length)*rowHeight+gap;}
+   height=cursor+30;
+   for(let i=0;i<columns.length;i++){
+    const col=[...columns[i]].sort((a,b)=>(order.get(a.id)??-1)-(order.get(b.id)??-1));
+    headers+='<text x="12" y="'+(starts[i]+13)+'" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>';
     for(let j=0;j<col.length;j++){
-     const n=col[j],w=Math.max(24,Math.min(320,n.value/max*320));
-     pos.set(n.id,{x:15,y:sectionStarts[i]+28+j*mobileRowHeight,w,h:14});
+     const n=col[j],y=starts[i]+25+j*rowHeight;
+     // Flow widths encode kWh; a minimum hit target is drawn separately.
+     const flowWidth=Math.max(.6,Math.min(330,n.value/max*330));
+     pos.set(n.id,{x:15,y,w:flowWidth,h:15});
     }
-   }else{
-    const space=height-48-col.length*9;
+   }
+   for(const n of nodes.slice(1)){
+    const p=pos.get(n.id),q=pos.get(n.parent);if(!p||!q)continue;
+    const x1=q.x+q.w/2,x2=p.x+p.w/2,y1=q.y+q.h,y2=p.y;
+    const d='M'+x1+' '+y1+' C'+x1+' '+((y1+y2)/2)+','+x2+' '+((y1+y2)/2)+','+x2+' '+y2;
+    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="none" stroke="#26a4bd" stroke-opacity=".3" stroke-width="'+Math.max(2,Math.min(p.w,q.w)*.65)+'"><title>'+tip(n)+'</title></path>';
+   }
+   for(const n of nodes){
+    const p=pos.get(n.id);
+    bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="2" fill="#238fa7"><title>'+tip(n)+'</title></rect>';
+    if(showLabels)bars+='<text x="15" y="'+(p.y+31)+'" font-size="12">'+esc(n.name)+' · '+n.value.toFixed(2)+' kWh</text>';
+   }
+  }else{
+   const maxLabel=Math.max(16,...nodes.map(n=>n.name.length));
+   const columnWidth=Math.max(300,Math.min(760,maxLabel*7.4+95));
+   height=Math.max(420,...columns.map(col=>col.length*39+50));
+   width=(depth+1)*columnWidth+35;
+   for(let i=0;i<columns.length;i++){
+    const col=columns[i],space=height-48-col.length*9;
     const weights=col.map(n=>Math.max(15,n.value/max*space));
     const factor=Math.min(1,space/Math.max(1,weights.reduce((a,b)=>a+b,0)));
-    let cursor=20;
-    for(let j=0;j<col.length;j++){
-     const size=weights[j]*factor;
-     pos.set(col[j].id,{x:15+i*columnWidth,y:cursor,w:16,h:size});
-     cursor+=size+9;
-    }
+    let y=20;
+    for(const n of col){const h=Math.max(1,weights[col.indexOf(n)]*factor);pos.set(n.id,{x:15+i*columnWidth,y,w:16,h});y+=h+9;}
+    headers+='<text x="'+(15+i*columnWidth)+'" y="13" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>';
    }
-  }
-  const tip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
-  let paths="",bars="";
-  for(const n of nodes.slice(1)){
-   const p=pos.get(n.id),q=pos.get(n.parent);if(!q)continue;
-   const sx=vertical?q.x+q.w/2:q.x+q.w,sy=vertical?q.y+q.h:q.y+q.h/2;
-   const tx=vertical?p.x+p.w/2:p.x,ty=vertical?p.y:p.y+p.h/2;
-   const d=vertical?"M"+sx+" "+sy+" C"+sx+" "+((sy+ty)/2)+","+tx+" "+((sy+ty)/2)+","+tx+" "+ty:"M"+sx+" "+sy+" C"+((sx+tx)/2)+" "+sy+","+((sx+tx)/2)+" "+ty+","+tx+" "+ty;
-   const stroke=Math.max(5,Math.min(vertical?p.w:p.h,vertical?q.w:q.h)*.7);
-   paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="none" stroke="#26a4bd" stroke-opacity=".35" stroke-width="'+stroke+'"><title>'+tip(n)+'</title></path>';
-  }
-  for(const n of nodes){
-   const p=pos.get(n.id);
-   bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="3" fill="#238fa7"><title>'+tip(n)+'</title></rect>';
-   if(showLabels){
-    const tx=vertical?p.x:p.x+p.w+7,ty=vertical?p.y+p.h+15:p.y+Math.min(16,p.h/2+4);
-    bars+='<text x="'+tx+'" y="'+ty+'" font-size="12">'+esc(n.name)+'</text>';
+   for(const n of nodes.slice(1)){
+    const p=pos.get(n.id),q=pos.get(n.parent);if(!p||!q)continue;
+    const x1=q.x+q.w,x2=p.x,y1=q.y+q.h/2,y2=p.y+p.h/2,m=(x1+x2)/2;
+    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="M'+x1+' '+y1+' C'+m+' '+y1+','+m+' '+y2+','+x2+' '+y2+'" fill="none" stroke="#26a4bd" stroke-opacity=".35" stroke-width="'+Math.max(2,Math.min(p.h,q.h)*.7)+'"><title>'+tip(n)+'</title></path>';
    }
+   for(const n of nodes){const p=pos.get(n.id);bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="3" fill="#238fa7"><title>'+tip(n)+'</title></rect>';if(showLabels)bars+='<text x="'+(p.x+22)+'" y="'+(p.y+Math.min(16,p.h/2+4))+'">'+esc(n.name)+'</text>';}
   }
-  const headers=columns.map((col,i)=>'<text x="'+(vertical?20:15+i*columnWidth)+'" y="'+(vertical?16:13)+'" font-weight="bold" '+(vertical?'transform="translate(0 '+(sectionStarts[i])+')"':'')+'>'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>').join("");
   const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
   return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · '+(vertical?"Vertikale Ansicht":"Horizontale Ansicht")+'</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg style="display:block;width:100%;height:auto;max-width:100%;overflow:hidden" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Sankey-Energieverbrauch">'+headers+paths+bars+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
