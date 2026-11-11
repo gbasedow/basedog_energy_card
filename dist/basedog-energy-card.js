@@ -1,8 +1,8 @@
-/* basedog_energy_card v0.7.0 */
-const CARD_VERSION="0.7.0";
+/* basedog_energy_card v0.8.0 */
+const CARD_VERSION="0.8.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
-const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true};
+const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto"};
 const UNITS={Wh:.001,kWh:1,MWh:1000,J:1/3600000,kJ:1/3600,MJ:1/3.6};
 const DURATIONS={minutes:60000,hours:3600000,days:86400000,weeks:604800000};
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -23,10 +23,10 @@ function place(r,devices,areas,floors){
  return {area:a?.name||"Ohne Bereich",floor:f?.name||"Ohne Etage"};
 }
 class BasedogEnergyCard extends HTMLElement{
- constructor(){super();this.attachShadow({mode:"open"});this.config=normalize({});this.last=0;this._signature="";this.vertical=false;this.resizeObserver=new ResizeObserver(entries=>{const w=entries[0]?.contentRect?.width||this.clientWidth;const next=w<700;if(next!==this.vertical){this.vertical=next;this.render();}});this.resizeObserver.observe(this);}
+ constructor(){super();this.attachShadow({mode:"open"});this.config=normalize({});this.last=0;this._signature="";this.vertical=false;this.cardWidth=0;this.resizeObserver=new ResizeObserver(entries=>{const w=entries[0]?.contentRect?.width||this.clientWidth;const next=this.config.orientation==="vertical"||this.config.orientation!=="horizontal"&&w<700;if(next!==this.vertical||Math.abs(w-this.cardWidth)>4){this.cardWidth=w;this.vertical=next;this.render();}});this.resizeObserver.observe(this);}
  static getConfigElement(){return document.createElement("basedog-energy-card-editor");}
  static getStubConfig(){return {...DEFAULT};}
- setConfig(c){const next=normalize(c),sig=JSON.stringify(next);this.config=next;if(sig!==this._signature){this._signature=sig;this.last=0;this.render();this.load();}}
+ setConfig(c){const next=normalize(c),sig=JSON.stringify(next);this.config=next;this.vertical=next.orientation==="vertical"||next.orientation!=="horizontal"&&(this.cardWidth||this.clientWidth)<700;if(sig!==this._signature){this._signature=sig;this.last=0;this.render();this.load();}}
  set hass(h){this._h=h;if(Date.now()-this.last>60000)this.load();}
  disconnectedCallback(){this.resizeObserver?.disconnect();}
  connectedCallback(){this.resizeObserver?.observe(this);}
@@ -80,7 +80,7 @@ class BasedogEnergyCard extends HTMLElement{
   const css='<style>:host{display:block}ha-card{padding:16px}.head{display:flex;align-items:center;justify-content:space-between;gap:8px}.head h3{margin:4px 0 10px}button{cursor:pointer;border:0;background:transparent;color:inherit;font-size:22px}.muted{color:var(--secondary-text-color);font-size:12px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font:12px sans-serif}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
   const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
   this.shadowRoot.innerHTML=css+'<ha-card><div class="head"><h3>'+esc(c.title)+' <small style="font-size:11px;font-weight:normal;opacity:.65">v'+CARD_VERSION+'</small></h3><button title="Aktualisieren" id="reload">↻</button></div>'+body+'</ha-card>';
-  if(!this.vertical){const svg=this.shadowRoot.querySelector("svg"),card=this.shadowRoot.querySelector("ha-card");if(svg&&card){const configured=(Number(this.config.grid_options?.rows)||8)*56;const head=card.querySelector(".head")?.getBoundingClientRect().height||48;const summary=card.querySelector(".muted")?.getBoundingClientRect().height||30;const available=Math.max(200,configured-head-summary-70);if(configured>260)svg.style.height=available+"px";svg.style.width="100%";svg.setAttribute("preserveAspectRatio","none");}}
+  if(!this.vertical){const svg=this.shadowRoot.querySelector("svg"),card=this.shadowRoot.querySelector("ha-card");if(svg&&card){const configured=(Number(this.config.grid_options?.rows)||8)*56;const head=card.querySelector(".head")?.getBoundingClientRect().height||48;const summary=card.querySelector(".muted")?.getBoundingClientRect().height||30;const available=Math.max(200,configured-head-summary-70);svg.style.height=available+"px";svg.style.width="100%";svg.setAttribute("preserveAspectRatio","none");}}
   this.shadowRoot.querySelector("#reload").onclick=()=>{this.last=0;this.load();};
   const tip=this.shadowRoot.querySelector("#sankey-tip");
   if(tip){
@@ -120,14 +120,17 @@ class BasedogEnergyCard extends HTMLElement{
    const children=new Map(),byId=new Map(nodes.map(n=>[n.id,n]));
    for(const n of nodes.slice(1)){if(!children.has(n.parent))children.set(n.parent,[]);children.get(n.parent).push(n);}
    // Stable depth-first order makes the source and target order consistent.
+   // Reserve independent, proportional lanes at every depth. Children inherit
+   // the parent's precise interval; the remainder stays unused rather than
+   // being falsely represented as a child flow.
    const assign=(id,x,w)=>{
     const n=byId.get(id);if(!n)return;
     pos.set(id,{x,y:35+n.depth*levelGap,w,h:barHeight});
     const kids=children.get(id)||[];
-    const positive=kids.reduce((s,k)=>s+Math.max(0,k.value),0);
+    const parentValue=Math.max(.000001,n.value);
     let next=x;
     for(const child of kids){
-     const cw=positive>0?Math.min(w,usable*Math.max(0,child.value)/max):0;
+     const cw=Math.min(Math.max(0,w-(next-x)),w*Math.max(0,child.value)/parentValue);
      assign(child.id,next,cw);
      next+=cw;
     }
@@ -196,6 +199,7 @@ class BasedogEnergyEditor extends HTMLElement{
    '<label>Labels (eine Label-ID pro Zeile)</label><textarea data-key="labels" rows="3">'+esc(c.labels.join("\n"))+'</textarea>'+
    input("duration","Dauer",c.duration,"number")+
    select("duration_unit","Einheit",[["minutes","Minuten"],["hours","Stunden"],["days","Tage"],["weeks","Wochen"]])+
+   select("orientation","Darstellung",[[ "auto","Automatisch nach Breite"],["vertical","Immer vertikal"],["horizontal","Immer horizontal"]])+
    select("time_mode","Bezugszeitpunkt",[["now","Jetzt"],["fixed","Fester Zeitpunkt"]])+
    input("end_time","Fester Endzeitpunkt",c.end_time,"datetime-local")+
    '<label class="check"><input type="checkbox" data-show-labels '+(c.show_labels!==false?"checked":"")+'> Beschriftungen im Diagramm anzeigen</label>'+
