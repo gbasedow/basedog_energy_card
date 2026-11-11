@@ -96,3 +96,7 @@ Vertikale Ansicht: Geschwungene, gefüllte Sankey-Bänder mit separat zugewiesen
 ## Version 0.8.0
 
 Korrektur des Sankey-Layouts: Getrennte Quellsegmente und geschwungene, gefüllte Verbindungen in beiden Ausrichtungen; Kinder erben proportionale Teilbereiche der Eltern. Neue Editoroption **Darstellung**: automatisch, immer vertikal oder immer horizontal. Die horizontale SVG wird an die konfigurierte Rasterhöhe angepasst, auch bei drei Zeilen. Die Version wird im Kartentitel angezeigt.
+
+## Version 0.9.0
+
+Sankey-Layout nach Analyse des nativen Home-Assistant-Frontend-Codes (`ha-sankey-chart.ts`, `sankey-layout.ts`, `sankey-path.ts`): gemeinsame Verbrauchsskala für alle Ebenen, eigene Ein- und Ausgangssegmente, 6px Knotenabstand, kubische Bézier-Bänder und hierarchische Sortierung. Beschriftungen erscheinen nur, wenn bei mindestens 10px effektiver Schriftgröße ausreichend Platz besteht; Tooltips bleiben immer verfügbar. Vertikale Ansicht nutzt die Kartenbreite, horizontale Ansicht die konfigurierten Rasterzeilen.
