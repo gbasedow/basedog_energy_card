@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.14.0 */
-const CARD_VERSION="0.14.0";
+/* basedog_energy_card v0.14.1 */
+const CARD_VERSION="0.14.1";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto",group_below_kwh:0};
@@ -198,11 +198,11 @@ class BasedogEnergyCard extends HTMLElement{
    if(vertical){
     const x1=q.x+sourceOffset,x2=p.x+targetOffset,y1=q.y+q.h,y2=p.y,cy=y1+(y2-y1)*.5;
     d='M'+x1+' '+y1+' C'+x1+' '+cy+','+x2+' '+cy+','+x2+' '+y2+
-      ' L'+(x2+targetFlow)+' '+y2+' C'+(x2+flow)+' '+cy+','+(x1+sourceFlow)+' '+cy+','+(x1+flow)+' '+y1+' Z';
+      ' L'+(x2+targetFlow)+' '+y2+' C'+(x2+targetFlow)+' '+cy+','+(x1+sourceFlow)+' '+cy+','+(x1+sourceFlow)+' '+y1+' Z';
    }else{
     const y1=q.y+sourceOffset,y2=p.y+targetOffset,x1=q.x+q.w,x2=p.x,cx=x1+(x2-x1)*.5;
     d='M'+x1+' '+y1+' C'+cx+' '+y1+','+cx+' '+y2+','+x2+' '+y2+
-      ' L'+x2+' '+(y2+targetFlow)+' C'+cx+' '+(y2+flow)+','+cx+' '+(y1+sourceFlow)+','+x1+' '+(y1+flow)+' Z';
+      ' L'+x2+' '+(y2+targetFlow)+' C'+cx+' '+(y2+targetFlow)+','+cx+' '+(y1+sourceFlow)+','+x1+' '+(y1+sourceFlow)+' Z';
    }
    const gid=gradientId(n),isResidual=!!n.residual;
    const sourceColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-(n.depth-1)/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':color(byId.get(n.parent)||root);
