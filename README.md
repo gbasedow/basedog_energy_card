@@ -1,4 +1,4 @@
-# basedog_sankey_card
+# basedog_energy_card
 
 Eine experimentelle Home-Assistant-Lovelace-Karte zur Darstellung von **Energieverbrauch als Sankey-Diagramm**.
 
@@ -16,18 +16,18 @@ Eine experimentelle Home-Assistant-Lovelace-Karte zur Darstellung von **Energiev
 
 1. HACS in Home Assistant öffnen und **Dashboard** auswählen.
 2. Über das Menü **Benutzerdefinierte Repositories** hinzufügen.
-3. Repository-URL `https://github.com/gbasedow/basedog_sankey_card` und Typ **Dashboard** wählen.
-4. `basedog_sankey_card` installieren und Home Assistant neu laden.
-5. Im Dashboard eine neue Karte hinzufügen: **basedog_sankey_card**.
+3. Repository-URL `https://github.com/gbasedow/basedog_energy_card` und Typ **Dashboard** wählen.
+4. `basedog_energy_card` installieren und Home Assistant neu laden.
+5. Im Dashboard eine neue Karte hinzufügen: **basedog_energy_card**.
 
-Alternativ kann die Ressource `dist/basedog-sankey-card.js` als JavaScript-Modul in Home Assistant eingebunden werden.
+Alternativ kann die Ressource `dist/basedog-energy-card.js` als JavaScript-Modul in Home Assistant eingebunden werden.
 
 ## Konfiguration
 
 Alle Felder sind im visuellen Editor verfügbar. Beispiel-YAML:
 
 ```yaml
-type: custom:basedog-sankey-card
+type: custom:basedog-energy-card
 title: Energiefluss
 entity: sensor.gesamtenergie
 entities:
@@ -55,6 +55,6 @@ Die Sensoren müssen geeignete **Langzeitstatistiken** mit Energieeinheiten (z. 
 
 ## Entwicklung
 
-`npm run check` prüft die JavaScript-Syntax. Die lauffähige Datei liegt in `dist/basedog-sankey-card.js`.
+`npm run check` prüft die JavaScript-Syntax. Die lauffähige Datei liegt in `dist/basedog-energy-card.js`.
 
 Lizenz: MIT.
