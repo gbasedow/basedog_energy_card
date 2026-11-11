@@ -14,11 +14,11 @@ Eine experimentelle Home-Assistant-Lovelace-Karte zur Darstellung von **Energiev
 
 ## Installation über HACS
 
-1. HACS in Home Assistant öffnen und **Dashboard** auswählen.
-2. Über das Menü **Benutzerdefinierte Repositories** hinzufügen.
-3. Repository-URL `https://github.com/gbasedow/basedog_energy_card` und Typ **Dashboard** wählen.
-4. `basedog_energy_card` installieren und Home Assistant neu laden.
-5. Im Dashboard eine neue Karte hinzufügen: **basedog_energy_card**.
+1. Das GitHub-Repository muss **öffentlich (Public)** sein. Bei einem privaten Repository zeigt der Marketplace bei der Eingabe des GitHub-Links **Not Found** an.
+2. In Home Assistant **Einstellungen → Marketplace → Über einen GitHub-Link hinzufügen** öffnen.
+3. Den Link `https://github.com/gbasedow/basedog_energy_card` eingeben und hinzufügen.
+4. `basedog_energy_card` im Marketplace installieren und den Browser neu laden.
+5. Im Dashboard die Karte mit Typ `custom:basedog-energy-card` verwenden.
 
 Alternativ kann die Ressource `dist/basedog-energy-card.js` als JavaScript-Modul in Home Assistant eingebunden werden.
 
@@ -51,7 +51,7 @@ levels:
 
 Die Sensoren müssen geeignete **Langzeitstatistiken** mit Energieeinheiten (z. B. kWh) in Home Assistant besitzen. Die Karte fragt die Recorder-Statistiken über die Home-Assistant-WebSocket-API ab. Es werden aktuell stündliche Statistikpunkte ausgewertet; sehr kurze Zeitfenster und die erste Teilstunde können deshalb ungenau sein. Die Karte wurde als erste Version erstellt und noch nicht in einer realen Home-Assistant-Installation getestet.
 
-**Hinweis:** Dieses Repository ist derzeit privat. Damit HACS es als benutzerdefiniertes Repository regulär beziehen kann, muss es öffentlich zugänglich sein. Eine Veröffentlichung im offiziellen HACS-Standardkatalog ist ein separater Schritt.
+**Hinweis:** Die GitHub-Sichtbarkeit wird in den Repository-Einstellungen unter **Settings → General → Danger Zone → Change repository visibility → Public** geändert. Eine Veröffentlichung im offiziellen Marketplace-Katalog ist ein separater Schritt.
 
 ## Entwicklung
 
