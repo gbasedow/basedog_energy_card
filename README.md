@@ -1,56 +1,60 @@
-# basedog_sankey_card für Home Assistant
+# basedog_sankey_card
 
-Eine Lovelace-Karte für die Visualisierung historischer Energieverbräuche als Sankey-Diagramm.
+Eine experimentelle Home-Assistant-Lovelace-Karte zur Darstellung von **Energieverbrauch als Sankey-Diagramm**.
 
 ## Funktionen
-- Zentrale Verbrauchsentität
-- Auswahl zusätzlicher Energieentitäten und Home-Assistant-Label-IDs
-- Zeitraum mit unabhängiger Dauer und Endzeitpunkt-Auswahl („Jetzt“ oder fest)
-- Konfigurierbare Ebenen-Reihenfolge: Etage, Bereich, Entität
-- Visueller Lovelace-Karteneditor (kein YAML erforderlich)
-- Nicht zugeordneter Verbrauch und Warnung bei Überzählung
+
+- Zentrale Energie-Verbrauchsentität frei wählen
+- Weitere Energieentitäten einzeln oder anhand von Home-Assistant-Labels auswählen
+- Auswertungsdauer in Minuten, Stunden, Tagen oder Wochen
+- Unabhängiger Bezugszeitpunkt: **Jetzt** oder ein fester Zeitpunkt
+- Ebenen in frei wählbarer Reihenfolge: **Etage → Bereich → Entität**
+- Konfiguration über den visuellen Karteneditor (GUI)
+- Anzeige nicht zugeordneten Verbrauchs und Warnung bei möglicher Doppelzählung
 
 ## Installation über HACS
-1. Das Repository muss für die normale HACS-Installation öffentlich zugänglich sein. Aktuell ist es privat; deshalb vor der HACS-Installation die Sichtbarkeit prüfen.
-2. In HACS → Frontend → ⋮ → Benutzerdefinierte Repositories die URL hinzufügen, Kategorie **Dashboard**.
-3. „Basedog Sankey Card“ installieren und Home Assistant im Browser neu laden.
-4. Dashboard bearbeiten → Karte hinzufügen → „Basedog Sankey Card“ auswählen.
 
-Alternativ `dist/basedog-sankey-card.js` nach `/config/www/` kopieren und die Ressource `/local/basedog-sankey-card.js` als JavaScript-Modul hinzufügen.
+1. HACS in Home Assistant öffnen und **Dashboard** auswählen.
+2. Über das Menü **Benutzerdefinierte Repositories** hinzufügen.
+3. Repository-URL `https://github.com/gbasedow/basedog_sankey_card` und Typ **Dashboard** wählen.
+4. `basedog_sankey_card` installieren und Home Assistant neu laden.
+5. Im Dashboard eine neue Karte hinzufügen: **basedog_sankey_card**.
 
-## Beispiel
+Alternativ kann die Ressource `dist/basedog-sankey-card.js` als JavaScript-Modul in Home Assistant eingebunden werden.
+
+## Konfiguration
+
+Alle Felder sind im visuellen Editor verfügbar. Beispiel-YAML:
+
 ```yaml
 type: custom:basedog-sankey-card
 title: Energiefluss
-entity: sensor.stromverbrauch_gesamt
+entity: sensor.gesamtenergie
 entities:
-  - sensor.kueche_energie
   - sensor.wohnzimmer_energie
+  - sensor.kueche_energie
 labels:
-  - energieverbrauch
+  - stromverbrauch
+duration: 24
+duration_unit: hours
+time_mode: now
+end_time: ""
 levels:
   - floor
   - area
   - entity
-duration: 24
-duration_unit: hours
-time_mode: now
-height: 400
 ```
 
-## Datenanforderungen und Grenzen
-- Unterstützt kumulative Energiesensoren mit verfügbaren Home-Assistant-Langzeitstatistiken (`sum`) und Einheiten Wh/kWh/MWh/J/kJ/MJ.
-- Die Verteilung wird anhand der ausgewählten Entitäten berechnet; es findet keine automatische Erkennung physischer Stromflüsse statt.
-- Die Hauptentität muss den Gesamtverbrauch repräsentieren; Teilzähler dürfen sich nicht überschneiden, sonst entstehen Doppelzählungen.
-- Labels beziehen sich auf Entity-Registry-Labels (IDs), nicht auf Label-Anzeigenamen. Bereich und Etage stammen aus der Entity- und Area-Registry.
-- Die Diagrammstruktur ist eine erste Implementierung; eine visuelle Prüfung in der Zielversion von Home Assistant und Tests mit realen Statistikdaten stehen noch aus.
-- Historische Statistikdaten können bei sehr kurzen oder nicht an Stunden ausgerichteten Zeiträumen unvollständig sein.
+`time_mode: fixed` verwendet den in `end_time` gewählten Zeitpunkt statt „Jetzt“.
+
+## Voraussetzungen und Einschränkungen
+
+Die Sensoren müssen geeignete **Langzeitstatistiken** mit Energieeinheiten (z. B. kWh) in Home Assistant besitzen. Die Karte fragt die Recorder-Statistiken über die Home-Assistant-WebSocket-API ab. Es werden aktuell stündliche Statistikpunkte ausgewertet; sehr kurze Zeitfenster und die erste Teilstunde können deshalb ungenau sein. Die Karte wurde als erste Version erstellt und noch nicht in einer realen Home-Assistant-Installation getestet.
+
+**Hinweis:** Dieses Repository ist derzeit privat. Damit HACS es als benutzerdefiniertes Repository regulär beziehen kann, muss es öffentlich zugänglich sein. Eine Veröffentlichung im offiziellen HACS-Standardkatalog ist ein separater Schritt.
 
 ## Entwicklung
-`npm run build` kopiert die dependencyfreie JavaScript-Datei nach `dist/`.
 
-## Releases
-Ein Tag `v0.1.0` startet den GitHub-Actions-Workflow, der `dist/basedog-sankey-card.js` an das GitHub-Release anhängt.
+`npm run check` prüft die JavaScript-Syntax. Die lauffähige Datei liegt in `dist/basedog-sankey-card.js`.
 
-## Lizenz
-MIT
+Lizenz: MIT.
