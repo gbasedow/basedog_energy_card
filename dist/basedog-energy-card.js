@@ -1,8 +1,8 @@
-/* basedog_energy_card v0.4.0 */
-const CARD_VERSION="0.4.0";
+/* basedog_energy_card v0.5.0 */
+const CARD_VERSION="0.5.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
-const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER]};
+const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true};
 const UNITS={Wh:.001,kWh:1,MWh:1000,J:1/3600000,kJ:1/3600,MJ:1/3.6};
 const DURATIONS={minutes:60000,hours:3600000,days:86400000,weeks:604800000};
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -23,11 +23,13 @@ function place(r,devices,areas,floors){
  return {area:a?.name||"Ohne Bereich",floor:f?.name||"Ohne Etage"};
 }
 class BasedogEnergyCard extends HTMLElement{
- constructor(){super();this.attachShadow({mode:"open"});this.config=normalize({});this.last=0;this._signature="";}
+ constructor(){super();this.attachShadow({mode:"open"});this.config=normalize({});this.last=0;this._signature="";this.vertical=false;this.resizeObserver=new ResizeObserver(entries=>{const w=entries[0]?.contentRect?.width||this.clientWidth;const next=w<700;if(next!==this.vertical){this.vertical=next;this.render();}});this.resizeObserver.observe(this);}
  static getConfigElement(){return document.createElement("basedog-energy-card-editor");}
  static getStubConfig(){return {...DEFAULT};}
  setConfig(c){const next=normalize(c),sig=JSON.stringify(next);this.config=next;if(sig!==this._signature){this._signature=sig;this.last=0;this.render();this.load();}}
  set hass(h){this._h=h;if(Date.now()-this.last>60000)this.load();}
+ disconnectedCallback(){this.resizeObserver?.disconnect();}
+ connectedCallback(){this.resizeObserver?.observe(this);}
  getCardSize(){return 8;}
  async load(){
   const h=this._h,c=this.config;if(!h||!c.entity||this.busy)return;
@@ -87,7 +89,7 @@ class BasedogEnergyCard extends HTMLElement{
   }
  }
  diagram(data){
-  const levels=activeLevels(this.config);
+  const levels=activeLevels(this.config),vertical=this.vertical,showLabels=this.config.show_labels!==false;
   const nodes=[{id:"root",name:this._h?.states[this.config.entity]?.attributes?.friendly_name||this.config.entity,value:data.total,depth:0}],map=new Map();
   for(const row of data.rows){
    let parent="root",path="";
@@ -103,33 +105,46 @@ class BasedogEnergyCard extends HTMLElement{
   if(data.total>assigned+.00001)nodes.push({id:"other",parent:"root",depth:1,name:"Nicht zugeordnet",value:data.total-assigned});
   const depth=Math.max(1,...nodes.map(n=>n.depth));
   const columns=Array.from({length:depth+1},(_,i)=>nodes.filter(n=>n.depth===i));
-  const columnWidth=300,width=(depth+1)*columnWidth+50;
-  const height=Math.max(400,...columns.map(col=>col.length*38+35));
+  // A generous, measured column width keeps full labels inside the SVG viewport.
+  const maxLabel=Math.max(16,...nodes.map(n=>n.name.length));
+  const columnWidth=Math.max(300,Math.min(760,maxLabel*7.4+95));
+  const horizontalHeight=Math.max(420,...columns.map(col=>col.length*39+50));
+  const verticalWidth=Math.max(760,...columns.map(col=>col.length*125+60));
+  const width=vertical?verticalWidth:(depth+1)*columnWidth+35;
+  const height=vertical?(depth+1)*195+55:horizontalHeight;
   const pos=new Map(),max=Math.max(1,...columns.map(cc=>cc.reduce((s,n)=>s+n.value,0)));
   for(let i=0;i<columns.length;i++){
-   const col=columns[i],usable=height-35-col.length*9;
-   const weights=col.map(n=>Math.max(14,n.value/max*usable));
-   const factor=Math.min(1,usable/Math.max(1,weights.reduce((a,b)=>a+b,0)));
-   let y=18;
-   for(let j=0;j<col.length;j++){const hh=weights[j]*factor;pos.set(col[j].id,{x:15+i*columnWidth,y,h:hh});y+=hh+9;}
+   const col=columns[i],space=vertical?width-50-col.length*10:height-48-col.length*9;
+   const weights=col.map(n=>Math.max(vertical?65:15,n.value/max*space));
+   const factor=Math.min(1,space/Math.max(1,weights.reduce((a,b)=>a+b,0)));
+   let cursor=20;
+   for(let j=0;j<col.length;j++){
+    const size=weights[j]*factor;
+    pos.set(col[j].id,vertical?{x:cursor,y:30+i*195,w:size,h:16}:{x:15+i*columnWidth,y:cursor,w:16,h:size});
+    cursor+=size+(vertical?10:9);
+   }
   }
   const tip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
   let paths="",bars="";
   for(const n of nodes.slice(1)){
    const p=pos.get(n.id),q=pos.get(n.parent);if(!q)continue;
-   const x1=q.x+16,x2=p.x,m=(x1+x2)/2;
-   const stroke=Math.max(5,Math.min(p.h,q.h)*.8);
-   const d="M"+x1+" "+(q.y+q.h/2)+" C"+m+" "+(q.y+q.h/2)+","+m+" "+(p.y+p.h/2)+","+x2+" "+(p.y+p.h/2);
+   const sx=vertical?q.x+q.w/2:q.x+q.w,sy=vertical?q.y+q.h:q.y+q.h/2;
+   const tx=vertical?p.x+p.w/2:p.x,ty=vertical?p.y:p.y+p.h/2;
+   const d=vertical?"M"+sx+" "+sy+" C"+sx+" "+((sy+ty)/2)+","+tx+" "+((sy+ty)/2)+","+tx+" "+ty:"M"+sx+" "+sy+" C"+((sx+tx)/2)+" "+sy+","+((sx+tx)/2)+" "+ty+","+tx+" "+ty;
+   const stroke=Math.max(5,Math.min(vertical?p.w:p.h,vertical?q.w:q.h)*.7);
    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="none" stroke="#26a4bd" stroke-opacity=".35" stroke-width="'+stroke+'"><title>'+tip(n)+'</title></path>';
   }
   for(const n of nodes){
    const p=pos.get(n.id);
-   bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="16" height="'+p.h+'" rx="3" fill="#238fa7"><title>'+tip(n)+'</title></rect>';
-   bars+='<text x="'+(p.x+22)+'" y="'+(p.y+Math.min(16,p.h/2+4))+'">'+esc(n.name)+'</text>';
+   bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="3" fill="#238fa7"><title>'+tip(n)+'</title></rect>';
+   if(showLabels){
+    const tx=vertical?p.x:p.x+p.w+7,ty=vertical?p.y+p.h+18:p.y+Math.min(16,p.h/2+4);
+    bars+='<text x="'+tx+'" y="'+ty+'" font-size="12">'+esc(n.name)+'</text>';
+   }
   }
-  const headers=columns.map((col,i)=>'<text x="'+(15+i*columnWidth)+'" y="13" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>').join("");
+  const headers=columns.map((col,i)=>'<text x="'+(vertical?20:15+i*columnWidth)+'" y="'+(vertical?20:13)+'" font-weight="bold" '+(vertical?'transform="translate(0 '+(i*195)+')"':'')+'>'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>').join("");
   const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
-  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · Bei schmaler Ansicht horizontal scrollen</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg width="'+width+'" height="'+height+'" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Sankey-Energieverbrauch">'+headers+paths+bars+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
+  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · '+(vertical?"Vertikale Ansicht":"Horizontale Ansicht")+'</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg style="width:100%;height:auto;max-width:100%;overflow:visible" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="Sankey-Energieverbrauch">'+headers+paths+bars+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
 }
 class BasedogEnergyEditor extends HTMLElement{
@@ -149,12 +164,14 @@ class BasedogEnergyEditor extends HTMLElement{
    select("duration_unit","Einheit",[["minutes","Minuten"],["hours","Stunden"],["days","Tage"],["weeks","Wochen"]])+
    select("time_mode","Bezugszeitpunkt",[["now","Jetzt"],["fixed","Fester Zeitpunkt"]])+
    input("end_time","Fester Endzeitpunkt",c.end_time,"datetime-local")+
+   '<label class="check"><input type="checkbox" data-show-labels '+(c.show_labels!==false?"checked":"")+'> Beschriftungen im Diagramm anzeigen</label>'+
    '<label>Strukturierung</label><p class="hint">Ebenen einzeln ein- oder ausschalten. Die Reihenfolge ist immer Etage → Bereich → Entität.</p>'+
    ORDER.map(k=>'<label class="check"><input type="checkbox" data-level="'+k+'" '+(c.levels.includes(k)?"checked":"")+'>'+({floor:"Etage",area:"Bereich",entity:"Entität"}[k])+'</label>').join("");
   this.shadowRoot.querySelectorAll("[data-key]").forEach(el=>el.addEventListener("change",()=>{
    const k=el.dataset.key,v=["entities","labels"].includes(k)?el.value.split(/[\n,]/).map(x=>x.trim()).filter(Boolean):k==="duration"?Number(el.value):el.value;
    this.config={...this.config,[k]:v};this.emit();
   }));
+  this.shadowRoot.querySelector("[data-show-labels]").addEventListener("change",el=>{this.config={...this.config,show_labels:el.target.checked};this.emit();});
   this.shadowRoot.querySelectorAll("[data-level]").forEach(el=>el.addEventListener("change",()=>{
    const levels=new Set(this.config.levels);if(el.checked)levels.add(el.dataset.level);else levels.delete(el.dataset.level);
    this.config={...this.config,levels:ORDER.filter(k=>levels.has(k))};this.emit();
