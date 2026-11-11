@@ -68,3 +68,7 @@ Die Karte berücksichtigt Bereichszuordnungen von Geräten, erlaubt das Ein-/Aus
 ## Version 0.3.0
 
 Die Versionsnummer wird direkt oben im visuellen Karteneditor und in der Karte angezeigt. Zusätzlich wurde die veraltete manuell eingebundene JavaScript-Ressource aus der Home-Assistant-Instanz entfernt, damit die Marketplace-Version geladen werden kann. Nach dem Update den Browser-Cache hart aktualisieren (Strg+Umschalt+R) oder die Home-Assistant-App neu starten.
+
+## Version 0.4.0
+
+Die Hierarchiespalten werden unabhängig von der Kartenbreite vollständig gerendert. Auf schmalen Bildschirmen kann horizontal gescrollt werden. Beim Überfahren eines Balkens oder Verbindungswegs mit der Maus erscheint ein Tooltip mit dem Namen und dem Energieverbrauch in kWh. Die Versionsnummer wird weiterhin im Karteneditor angezeigt.
