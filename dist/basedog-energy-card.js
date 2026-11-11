@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.10.0 */
-const CARD_VERSION="0.10.0";
+/* basedog_energy_card v0.11.0 */
+const CARD_VERSION="0.11.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto",group_below_kwh:0};
@@ -151,16 +151,20 @@ class BasedogEnergyCard extends HTMLElement{
   }
   // Match the native energy Sankey theme colors (--graph-color-N).
   const styles=getComputedStyle(this),palette=Array.from({length:54},(_,i)=>styles.getPropertyValue("--graph-color-"+(i+1)).trim()||styles.getPropertyValue("--color-"+(i+1)).trim());
-  const primary=styles.getPropertyValue("--primary-color").trim()||"#03a9f4";
+  const primary=styles.getPropertyValue("--energy-grid-consumption-color").trim()||styles.getPropertyValue("--energy-grid-consumption-color-0").trim()||"#488fc7";
+  const homeColor=styles.getPropertyValue("--energy-solar-color").trim()||styles.getPropertyValue("--primary-color").trim()||"#00a6c7";
   const gray=styles.getPropertyValue("--state-unavailable-color").trim()||"#bdbdbd";
   const nodeColor=new Map([["root",primary]]);let colorIndex=0;
   for(const n of nodes.slice(1)){
-   nodeColor.set(n.id,n.id==="other"||n.name==="Zusammengefasst"?gray:n.depth===depth?(palette[colorIndex++%54]||primary):(nodeColor.get(n.parent)||primary));
+   nodeColor.set(n.id,n.id==="other"||n.name==="Zusammengefasst"?gray:n.depth===1?homeColor:n.depth===depth?(palette[colorIndex++%54]||homeColor):(nodeColor.get(n.parent)||homeColor));
   }
   const color=n=>nodeColor.get(n.id)||primary;
   const tooltip=n=>esc(n.name+" · "+n.value.toFixed(3)+" kWh");
   const outgoing=new Map(),incoming=new Map();
-  let paths="",bars="",labels="";
+  let paths="",bars="",labels="",gradients="";
+  // HA's ECharts series uses lineStyle.color='gradient', opacity=.4.
+  // Use a unique linear gradient per ribbon from source-node to target-node.
+  const gradientId=n=>"basedog-flow-"+nodes.indexOf(n);
   for(const n of nodes.slice(1)){
    const p=layout.get(n.id),q=layout.get(n.parent);
    if(!p||!q||n.value<=0)continue;
@@ -177,7 +181,9 @@ class BasedogEnergyCard extends HTMLElement{
     d='M'+x1+' '+y1+' C'+cx+' '+y1+','+cx+' '+y2+','+x2+' '+y2+
       ' L'+x2+' '+(y2+flow)+' C'+cx+' '+(y2+flow)+','+cx+' '+(y1+flow)+','+x1+' '+(y1+flow)+' Z';
    }
-   paths+='<path class="sankey-hover" data-tip="'+tooltip(n)+'" d="'+d+'" fill="'+esc(color(n))+'" fill-opacity=".4"><title>'+tooltip(n)+'</title></path>';
+   const gid=gradientId(n),sourceColor=color(byId.get(n.parent)||root);
+   gradients+='<linearGradient id="'+gid+'" x1="'+(vertical?'0%':'0%')+'" y1="0%" x2="'+(vertical?'0%':'100%')+'" y2="'+(vertical?'100%':'0%')+'"><stop offset="0%" stop-color="'+esc(sourceColor)+'"/><stop offset="100%" stop-color="'+esc(color(n))+'"/></linearGradient>';
+   paths+='<path class="sankey-hover" data-tip="'+tooltip(n)+'" d="'+d+'" fill="url(#'+gid+')" fill-opacity=".4"><title>'+tooltip(n)+'</title></path>';
    // Label inside the ribbon, only if it remains legible at the rendered scale.
    const text=n.name+' · '+n.value.toFixed(2)+' kWh',needed=text.length*6.5+10;
    const physicalFlow=flow*(vertical?Math.min(1,(this.cardWidth||360)/viewWidth):1);
@@ -206,7 +212,7 @@ class BasedogEnergyCard extends HTMLElement{
    }
   }
   const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
-  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · '+(vertical?"Vertikale Ansicht":"Horizontale Ansicht")+'</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg style="display:block;width:100%;height:auto;max-width:100%;overflow:hidden" viewBox="0 0 '+viewWidth+' '+viewHeight+'" role="img" aria-label="Sankey-Energieverbrauch">'+paths+bars+labels+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
+  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · '+(vertical?"Vertikale Ansicht":"Horizontale Ansicht")+'</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg style="display:block;width:100%;height:auto;max-width:100%;overflow:hidden" viewBox="0 0 '+viewWidth+' '+viewHeight+'" role="img" aria-label="Sankey-Energieverbrauch">'+'<defs>'+gradients+'</defs>'+paths+bars+labels+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
 }
 class BasedogEnergyEditor extends HTMLElement{
