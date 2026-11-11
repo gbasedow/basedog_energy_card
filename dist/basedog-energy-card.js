@@ -201,8 +201,11 @@ class BasedogEnergyCard extends HTMLElement{
     d='M'+x1+' '+y1+' C'+cx+' '+y1+','+cx+' '+y2+','+x2+' '+y2+
       ' L'+x2+' '+(y2+flow)+' C'+cx+' '+(y2+flow)+','+cx+' '+(y1+flow)+','+x1+' '+(y1+flow)+' Z';
    }
-   const gid=gradientId(n),sourceColor=color(byId.get(n.parent)||root),transition=n.residual||byId.get(n.parent)?.residual?0:85;
-   gradients+='<linearGradient id="'+gid+'" x1="'+(vertical?'0%':'0%')+'" y1="0%" x2="'+(vertical?'0%':'100%')+'" y2="'+(vertical?'100%':'0%')+'"><stop offset="0%" stop-color="'+esc(sourceColor)+'"/><stop offset="'+transition+'%" stop-color="'+esc(sourceColor)+'"/><stop offset="100%" stop-color="'+esc(color(n))+'"/></linearGradient>';
+   const gid=gradientId(n),isResidual=!!n.residual;
+   const sourceColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-(n.depth-1)/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':color(byId.get(n.parent)||root);
+   const targetColor=isResidual?'color-mix(in srgb, '+primary+' '+(100*(1-n.depth/Math.max(1,depth))).toFixed(2)+'%, '+gray+')':color(n);
+   const transition=isResidual?0:85;
+   gradients+='<linearGradient id="'+gid+'" x1="'+(vertical?'0%':'0%')+'" y1="0%" x2="'+(vertical?'0%':'100%')+'" y2="'+(vertical?'100%':'0%')+'"><stop offset="0%" stop-color="'+esc(sourceColor)+'"/><stop offset="'+transition+'%" stop-color="'+esc(sourceColor)+'"/><stop offset="100%" stop-color="'+esc(targetColor)+'"/></linearGradient>';
    paths+='<path class="sankey-hover" data-tip="'+tooltip(n)+'" d="'+d+'" fill="url(#'+gid+')" fill-opacity=".4"><title>'+tooltip(n)+'</title></path>';
    // Label inside the ribbon, only if it remains legible at the rendered scale.
    const text=n.name+' · '+n.value.toFixed(2)+' kWh',needed=text.length*6.5+10;
