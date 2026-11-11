@@ -173,10 +173,19 @@ class BasedogEnergyCard extends HTMLElement{
     for(const n of col){const h=Math.max(1,weights[col.indexOf(n)]*factor);pos.set(n.id,{x:15+i*columnWidth,y,w:16,h});y+=h+9;}
     headers+='<text x="'+(15+i*columnWidth)+'" y="13" font-weight="bold">'+esc(i===0?"Gesamt":({floor:"Etage",area:"Bereich",entity:"Entität"}[levels[i-1]]||"Weitere"))+'</text>';
    }
+   // Separate source/target ports avoid drawing all paths from a shared center.
+   const outgoing=new Map();
    for(const n of nodes.slice(1)){
     const p=pos.get(n.id),q=pos.get(n.parent);if(!p||!q)continue;
-    const x1=q.x+q.w,x2=p.x,y1=q.y+q.h/2,y2=p.y+p.h/2,m=(x1+x2)/2;
-    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="M'+x1+' '+y1+' C'+m+' '+y1+','+m+' '+y2+','+x2+' '+y2+'" fill="none" stroke="#26a4bd" stroke-opacity=".35" stroke-width="'+Math.max(2,Math.min(p.h,q.h)*.7)+'"><title>'+tip(n)+'</title></path>';
+    const siblings=nodes.filter(x=>x.parent===n.parent);
+    const total=siblings.reduce((s,x)=>s+Math.max(0,x.value),0);
+    const slot=outgoing.get(n.parent)||0;
+    const sourceH=Math.max(0,Math.min(q.h-slot,q.h*Math.max(0,n.value)/Math.max(total,.000001)));
+    const sy=q.y+slot,ty=p.y,th=p.h,x1=q.x+q.w,x2=p.x,m=(x1+x2)/2;
+    outgoing.set(n.parent,slot+sourceH);
+    const d='M'+x1+' '+sy+' C'+m+' '+sy+','+m+' '+ty+','+x2+' '+ty+
+     ' L'+x2+' '+(ty+th)+' C'+m+' '+(ty+th)+','+m+' '+(sy+sourceH)+','+x1+' '+(sy+sourceH)+' Z';
+    paths+='<path class="sankey-hover" data-tip="'+tip(n)+'" d="'+d+'" fill="#26a4bd" fill-opacity=".32" stroke="none"><title>'+tip(n)+'</title></path>';
    }
    for(const n of nodes){const p=pos.get(n.id);bars+='<rect class="sankey-hover" data-tip="'+tip(n)+'" x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+p.h+'" rx="3" fill="#238fa7"><title>'+tip(n)+'</title></rect>';if(showLabels)bars+='<text x="'+(p.x+22)+'" y="'+(p.y+Math.min(16,p.h/2+4))+'">'+esc(n.name)+'</text>';}
   }
