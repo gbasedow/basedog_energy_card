@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.22.0 */
-const CARD_VERSION="0.22.0";
+/* basedog_energy_card v0.23.0 */
+const CARD_VERSION="0.23.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",source:"energy",levels:[...ORDER],show_date_picker:false,show_labels:true,show_values:false,orientation:"auto",group_below_kwh:0,group_levels:1};
@@ -117,7 +117,7 @@ class BasedogEnergyCard extends HTMLElement{
  }
  render(){
   const c=this.config,r=this.result;
-  const css='<style>:host{display:block;height:100%}ha-card{height:400px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}ha-card.is-vertical{height:500px}ha-card.is-grid,ha-card.is-panel{height:100%;min-height:300px}.content{flex:1;display:flex;flex-direction:column;min-height:0;box-sizing:border-box}.chart{flex:1;position:relative;min-height:200px;min-width:0}.chart svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}ha-card.has-datebar .content{padding-bottom:2px}.datebar{flex:none;display:flex;align-items:center;gap:2px;padding:0 8px 6px 10px;font-size:13px;color:var(--secondary-text-color)}.datebar button{position:relative;display:inline-flex;align-items:center;gap:6px;height:28px;border:0;border-radius:14px;background:none;color:inherit;font:inherit;cursor:pointer;padding:0 8px}.datebar button:hover:not(:disabled){background:color-mix(in srgb,var(--primary-text-color) 8%,transparent)}.datebar button:disabled{opacity:.35;cursor:default}.datebar ha-icon{--mdc-icon-size:18px}.datebar .nav{width:28px;padding:0;justify-content:center}.datebar .spacer{flex:1}.datebar .today{font-size:12px;font-weight:500;padding:0 10px;color:var(--primary-color);background:color-mix(in srgb,var(--primary-color) 12%,transparent)}.datebar .today:disabled{opacity:.5}.datebar input{position:absolute;inset:0;opacity:0;pointer-events:none;width:100%;border:0;padding:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:Roboto,Noto,sans-serif;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
+  const css='<style>:host{display:block;height:100%}ha-card{height:400px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}ha-card.is-vertical{height:500px}ha-card.is-grid,ha-card.is-panel{height:100%;min-height:300px}.content{flex:1;display:flex;flex-direction:column;min-height:0;box-sizing:border-box}.chart{flex:1;position:relative;min-height:120px;min-width:0}.chart svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}ha-card.has-datebar .content{padding-bottom:2px}.datebar{flex:none;display:flex;align-items:center;gap:2px;padding:0 8px 6px 10px;font-size:13px;color:var(--secondary-text-color)}.datebar button{position:relative;display:inline-flex;align-items:center;gap:6px;height:28px;border:0;border-radius:14px;background:none;color:inherit;font:inherit;cursor:pointer;padding:0 8px}.datebar button:hover:not(:disabled){background:color-mix(in srgb,var(--primary-text-color) 8%,transparent)}.datebar button:disabled{opacity:.35;cursor:default}.datebar ha-icon{--mdc-icon-size:18px}.datebar .nav{width:28px;padding:0;justify-content:center}.datebar .spacer{flex:1}.datebar .today{font-size:12px;font-weight:500;padding:0 10px;color:var(--primary-color);background:color-mix(in srgb,var(--primary-color) 12%,transparent)}.datebar .today:disabled{opacity:.5}.datebar input{position:absolute;inset:0;opacity:0;pointer-events:none;width:100%;border:0;padding:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:Roboto,Noto,sans-serif;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{flex:none;margin-top:8px;font-size:13px}details summary{cursor:pointer}details ul{max-height:140px;overflow:auto;margin:6px 0 0;padding-left:20px}details li{overflow-wrap:anywhere;line-height:1.5}details .id{color:var(--secondary-text-color);font-size:12px}</style>';
   const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
   this.shadowRoot.innerHTML=css+'<ha-card class="'+(this.vertical?"is-vertical ":"")+(c.show_date_picker?"has-datebar ":"")+(this._layout==="grid"?"is-grid":this._layout==="panel"?"is-panel":"")+'">'+(c.title?'<div class="card-header">'+esc(c.title)+'</div>':'')+'<div class="content">'+body+'</div>'+this.dateBar()+'</ha-card>';
   {const ch=this.shadowRoot.querySelector(".chart");
@@ -129,6 +129,7 @@ class BasedogEnergyCard extends HTMLElement{
     if(w>0&&h>0&&(Math.abs(w-(this.chartW||0))>1||Math.abs(h-(this.chartH||0))>1)){this.chartW=w;this.chartH=h;cancelAnimationFrame(this._raf);this._raf=requestAnimationFrame(()=>this.render());}});
     this._chartRO.observe(ch);}}
   this.bindDateBar();
+  {const d=this.shadowRoot.querySelector("#missing");if(d){d.querySelector("summary").onclick=()=>{this._missingOpen=!d.open;};}}
   const tip=this.shadowRoot.querySelector("#sankey-tip");
   if(tip){
    const svg=this.shadowRoot.querySelector("svg");
@@ -240,6 +241,10 @@ class BasedogEnergyCard extends HTMLElement{
     if(showValues){if(width(fmt(n.value),fs)>maxW)continue;lines.push(fmt(n.value));}
     if(vertical?lines.length<=3:lines.length*fs*1.2<=maxH)return {fs,lines};
    }
+   if(showValues){
+    const one=n.label+" · "+fmt(n.value);
+    for(let fs=FONT;fs>=4;fs-=.5)if(width(one,fs)<=maxW&&(vertical||fs*1.2<=maxH))return {fs,lines:[one]};
+   }
    return null;
   };
   // --- geometry: port of HA's sankey-layout.ts (justify, pass-through nodes, space-around) ---
@@ -320,7 +325,7 @@ class BasedogEnergyCard extends HTMLElement{
   const outs=new Map(),ins=new Map();
   for(const l of links){
    const s=pos.get(l.source),sv=nodeById.get(l.source).value;
-   l.size=l.value/Math.max(1e-9,sv)*s.size;
+   l.size=Math.max(1,l.value/Math.max(1e-9,sv)*s.size);
    if(!outs.has(l.source))outs.set(l.source,[]);outs.get(l.source).push(l);
    if(!ins.has(l.target))ins.set(l.target,[]);ins.get(l.target).push(l);
   }
@@ -370,16 +375,17 @@ class BasedogEnergyCard extends HTMLElement{
     labels+=f.lines.map((t,i)=>'<text x="'+x+'" y="'+(cy+(i-(f.lines.length-1)/2)*lh)+'" dominant-baseline="middle" font-size="'+f.fs+'">'+esc(t)+'</text>').join("");
    }
   }
-  const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
+  const missing=data.missing.length?'<details id="missing"'+(this._missingOpen?' open':'')+'><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+
+   data.missing.map(id=>{const n=this._h?.states[id]?.attributes?.friendly_name;return '<li>'+(n?esc(n)+' <span class="id">'+esc(id)+'</span>':esc(id))+'</li>';}).join("")+'</ul></details>':"";
   return (assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="chart"><svg preserveAspectRatio="xMinYMin meet" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Sankey-Energieverbrauch"><defs>'+gradients+'</defs>'+paths+bars+labels+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
 }
 const EDITOR_LABELS={title:"Titel",entity:"Zentrale Energieentität (Gesamtverbrauch)",source:"Quelle der Verbraucher",labels:"Labels",entities:"Energie-Entitäten",
- show_date_picker:"Datumsauswahl unten anzeigen",orientation:"Darstellung",levels:"Ebenen",show_labels:"Beschriftungen im Diagramm anzeigen",
- show_values:"Werte (kWh) in den Beschriftungen anzeigen",group_below_kwh:"Kleine Werte zusammenfassen unter",group_levels:"Zusammenfassen über Ebenen"};
+ show_date_picker:"Datumsauswahl unten anzeigen",orientation:"Darstellung",levels:"Ebenen",show_labels:"Beschriftung anzeigen",
+ show_values:"Energiewerte (kWh) anzeigen",group_below_kwh:"Kleine Werte zusammenfassen unter",group_levels:"Zusammenfassen über Ebenen"};
 const EDITOR_HELP={source:"Energie-Dashboard: Geräte aus den Energie-Einstellungen. Labels/Entitäten: eigene Auswahl.",
  show_date_picker:"Ohne Datumsauswahl wird immer der heutige Tag angezeigt.",levels:"Reihenfolge immer Etage → Bereich → Entität.",
- group_below_kwh:"0 = aus",group_levels:"1 = nur Entitäten, 2 = auch Bereiche, 3 = auch Etagen"};
+ group_below_kwh:"Dezimalzahl in kWh, z. B. 0,05. 0 = aus",show_values:"Wird an die Beschriftung angehängt, wenn Platz ist; sonst im Tooltip.",group_levels:"1 = nur Entitäten, 2 = auch Bereiche, 3 = auch Etagen"};
 const ENERGY_FILTER={domain:"sensor",device_class:"energy"};
 function editorSchema(c){
  return [
@@ -388,13 +394,13 @@ function editorSchema(c){
   {name:"source",selector:{select:{mode:"dropdown",options:[{value:"energy",label:"Energie-Dashboard"},{value:"labels",label:"Labels"},{value:"entities",label:"Entitäten"}]}}},
   ...(c.source==="labels"?[{name:"labels",selector:{label:{multiple:true}}}]:[]),
   ...(c.source==="entities"?[{name:"entities",selector:{entity:{multiple:true,filter:ENERGY_FILTER}}}]:[]),
+  {name:"show_labels",selector:{boolean:{}}},
+  {name:"show_values",selector:{boolean:{}}},
   {name:"show_date_picker",selector:{boolean:{}}},
   {name:"orientation",selector:{select:{mode:"dropdown",options:[{value:"auto",label:"Automatisch nach Breite"},{value:"vertical",label:"Immer vertikal"},{value:"horizontal",label:"Immer horizontal"}]}}},
   {name:"levels",selector:{select:{multiple:true,mode:"list",options:[{value:"floor",label:"Etage"},{value:"area",label:"Bereich"},{value:"entity",label:"Entität"}]}}},
-  {name:"show_labels",selector:{boolean:{}}},
-  {name:"show_values",selector:{boolean:{}}},
   {type:"grid",name:"",schema:[
-   {name:"group_below_kwh",selector:{number:{min:0,step:0.01,mode:"box",unit_of_measurement:"kWh"}}},
+   {name:"group_below_kwh",selector:{number:{min:0,step:"any",mode:"box",unit_of_measurement:"kWh"}}},
    {name:"group_levels",selector:{number:{min:1,max:3,step:1,mode:"box"}}}
   ]}
  ];
