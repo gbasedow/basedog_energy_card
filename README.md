@@ -100,3 +100,7 @@ Korrektur des Sankey-Layouts: Getrennte Quellsegmente und geschwungene, gefüllt
 ## Version 0.9.0
 
 Sankey-Layout nach Analyse des nativen Home-Assistant-Frontend-Codes (`ha-sankey-chart.ts`, `sankey-layout.ts`, `sankey-path.ts`): gemeinsame Verbrauchsskala für alle Ebenen, eigene Ein- und Ausgangssegmente, 6px Knotenabstand, kubische Bézier-Bänder und hierarchische Sortierung. Beschriftungen erscheinen nur, wenn bei mindestens 10px effektiver Schriftgröße ausreichend Platz besteht; Tooltips bleiben immer verfügbar. Vertikale Ansicht nutzt die Kartenbreite, horizontale Ansicht die konfigurierten Rasterzeilen.
+
+## Version 0.17.0
+
+Optik an die native Home-Assistant-Karte angepasst: Standard-Kartenkopf (`ha-card`-Header-Schriftart und -größe), kein Versionsbadge und kein Aktualisieren-Button mehr im Kopf (die Version steht weiterhin im Karteneditor), Home-Assistant-Schriftart in den Diagrammbeschriftungen, keine Verzerrung des Diagramms mehr durch gestrecktes SVG, dezenter Hover-Effekt auf den Flussbändern. Die Zusammenfassungszeile steht jetzt unter dem Diagramm.

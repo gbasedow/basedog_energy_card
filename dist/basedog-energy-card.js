@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.16.0 */
-const CARD_VERSION="0.16.0";
+/* basedog_energy_card v0.17.0 */
+const CARD_VERSION="0.17.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,orientation:"auto",group_below_kwh:0};
@@ -77,11 +77,9 @@ class BasedogEnergyCard extends HTMLElement{
  }
  render(){
   const c=this.config,r=this.result;
-  const css='<style>:host{display:block}ha-card{padding:16px}.head{display:flex;align-items:center;justify-content:space-between;gap:8px}.head h3{margin:4px 0 10px}button{cursor:pointer;border:0;background:transparent;color:inherit;font-size:22px}.muted{color:var(--secondary-text-color);font-size:12px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font:12px sans-serif}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
+  const css='<style>:host{display:block}ha-card{display:block;overflow:hidden}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,sans-serif));font-size:12px;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
   const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
-  this.shadowRoot.innerHTML=css+'<ha-card><div class="head"><h3>'+esc(c.title)+' <small style="font-size:11px;font-weight:normal;opacity:.65">v'+CARD_VERSION+'</small></h3><button title="Aktualisieren" id="reload">↻</button></div>'+body+'</ha-card>';
-  {const svg=this.shadowRoot.querySelector("svg"),card=this.shadowRoot.querySelector("ha-card");if(svg&&card){const configured=Math.max(180,(Number(this.config.grid_options?.rows)||8)*56);const head=card.querySelector(".head")?.getBoundingClientRect().height||48;const summary=card.querySelector(".muted")?.getBoundingClientRect().height||30;const available=Math.max(100,configured-head-summary-48);svg.style.height=available+"px";svg.style.width="100%";svg.setAttribute("preserveAspectRatio","none");}}
-  this.shadowRoot.querySelector("#reload").onclick=()=>{this.last=0;this.load();};
+  this.shadowRoot.innerHTML=css+'<ha-card>'+(c.title?'<div class="card-header">'+esc(c.title)+'</div>':'')+'<div class="content">'+body+'</div></ha-card>';
   const tip=this.shadowRoot.querySelector("#sankey-tip");
   if(tip){
    const svg=this.shadowRoot.querySelector("svg");
@@ -148,7 +146,7 @@ class BasedogEnergyCard extends HTMLElement{
   const layout=new Map();
   const rootSpan=breadth-breadthStart-breadthEnd;
   const levelStart=vertical?25:18;
-  const levelEnd=vertical?viewHeight-20:viewWidth-18;
+  const levelEnd=vertical?viewHeight-20:viewWidth-(showLabels?130:18);
   const levelStep=Math.max(1,(levelEnd-levelStart-nodeThickness)/Math.max(1,depth));
   // A fixed residual lane branches ONCE from the root, then stays at
   // exactly the same position and width through every subsequent level.
@@ -251,7 +249,7 @@ class BasedogEnergyCard extends HTMLElement{
    }
   }
   const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
-  return '<p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten · '+(vertical?"Vertikale Ansicht":"Horizontale Ansicht")+'</p>'+(assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg style="display:block;width:100%;height:auto;max-width:100%;overflow:hidden" viewBox="0 0 '+viewWidth+' '+viewHeight+'" role="img" aria-label="Sankey-Energieverbrauch">'+'<defs>'+gradients+'</defs>'+paths+bars+labels+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
+  return (assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="scroll"><svg style="display:block;width:100%;height:auto;max-width:100%;overflow:visible" viewBox="0 0 '+viewWidth+' '+viewHeight+'" role="img" aria-label="Sankey-Energieverbrauch">'+'<defs>'+gradients+'</defs>'+paths+bars+labels+'</svg></div><p class="muted">Gesamt: '+data.total.toFixed(2)+' kWh · '+data.rows.length+' von '+data.selected+' Entitäten mit Verbrauchswerten</p><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
 }
 class BasedogEnergyEditor extends HTMLElement{
