@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.18.0 */
-const CARD_VERSION="0.18.0";
+/* basedog_energy_card v0.19.0 */
+const CARD_VERSION="0.19.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,show_values:false,orientation:"auto",group_below_kwh:0};
@@ -23,14 +23,17 @@ function place(r,devices,areas,floors){
  return {area:a?.name||"Ohne Bereich",floor:f?.name||"Ohne Etage"};
 }
 class BasedogEnergyCard extends HTMLElement{
- constructor(){super();this.attachShadow({mode:"open"});this.config=normalize({});this.last=0;this._signature="";this.vertical=false;this.cardWidth=0;this.resizeObserver=new ResizeObserver(entries=>{const w=entries[0]?.contentRect?.width||this.clientWidth;const next=this.config.orientation==="vertical"||this.config.orientation!=="horizontal"&&w<700;if(next!==this.vertical||Math.abs(w-this.cardWidth)>4){this.cardWidth=w;this.vertical=next;this.render();}});this.resizeObserver.observe(this);}
+ constructor(){super();this.attachShadow({mode:"open"});this.config=normalize({});this.last=0;this._signature="";this.vertical=false;this.cardWidth=0;this.resizeObserver=new ResizeObserver(entries=>{const w=entries[0]?.contentRect?.width||this.clientWidth,h=entries[0]?.contentRect?.height||0;const next=this.config.orientation==="vertical"||this.config.orientation!=="horizontal"&&w<700;if(next!==this.vertical||Math.abs(w-this.cardWidth)>4||Math.abs(h-(this.hostHeight||0))>4){this.hostHeight=h;this.cardWidth=w;this.vertical=next;this.render();}});this.resizeObserver.observe(this);}
  static getConfigElement(){return document.createElement("basedog-energy-card-editor");}
  static getStubConfig(){return {...DEFAULT};}
  setConfig(c){const next=normalize(c),sig=JSON.stringify(next);this.config=next;this.vertical=next.orientation==="vertical"||next.orientation!=="horizontal"&&(this.cardWidth||this.clientWidth)<700;if(sig!==this._signature){this._signature=sig;this.last=0;this.render();this.load();}}
  set hass(h){this._h=h;if(Date.now()-this.last>60000)this.load();}
  disconnectedCallback(){this.resizeObserver?.disconnect();}
  connectedCallback(){this.resizeObserver?.observe(this);}
- getCardSize(){return 8;}
+ getCardSize(){return 5;}
+ getGridOptions(){return {columns:12,min_columns:6,rows:6,min_rows:2};}
+ set layout(v){if(v!==this._layout){this._layout=v;if(this.shadowRoot.firstChild)this.render();}}
+ get layout(){return this._layout;}
  async load(){
   const h=this._h,c=this.config;if(!h||!c.entity||this.busy)return;
   this.busy=true;this.last=Date.now();
@@ -77,9 +80,12 @@ class BasedogEnergyCard extends HTMLElement{
  }
  render(){
   const c=this.config,r=this.result;
-  const css='<style>:host{display:block}ha-card{display:block;overflow:hidden}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,sans-serif));font-size:12px;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
+  const css='<style>:host{display:block}ha-card{height:400px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}ha-card.is-vertical{height:500px}ha-card.is-grid,ha-card.is-panel{height:100%}.content{flex:1;display:flex;flex-direction:column;min-height:0;box-sizing:border-box}.chart{flex:1;position:relative;min-height:0;min-width:0}.chart svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:var(--ha-font-family-body,var(--paper-font-body1_-_font-family,Roboto,sans-serif));font-size:12px;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
   const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
-  this.shadowRoot.innerHTML=css+'<ha-card>'+(c.title?'<div class="card-header">'+esc(c.title)+'</div>':'')+'<div class="content">'+body+'</div></ha-card>';
+  this.shadowRoot.innerHTML=css+'<ha-card class="'+(this.vertical?"is-vertical ":"")+(this._layout==="grid"?"is-grid":this._layout==="panel"?"is-panel":"")+'">'+(c.title?'<div class="card-header">'+esc(c.title)+'</div>':'')+'<div class="content">'+body+'</div></ha-card>';
+  {const ch=this.shadowRoot.querySelector(".chart");
+   if(ch&&!this._measuring){const w=Math.round(ch.clientWidth),h=Math.round(ch.clientHeight);
+    if(w>0&&h>0&&(Math.abs(w-(this.chartW||0))>1||Math.abs(h-(this.chartH||0))>1)){this.chartW=w;this.chartH=h;this._measuring=true;try{this.render();}finally{this._measuring=false;}return;}}}
   const tip=this.shadowRoot.querySelector("#sankey-tip");
   if(tip){
    const svg=this.shadowRoot.querySelector("svg");
@@ -140,64 +146,96 @@ class BasedogEnergyCard extends HTMLElement{
   walk("root");
   const sections=lastDepth+1;
   const columns=Array.from({length:sections},(_,i)=>nodes.filter(n=>n.depth===i).sort((a,b)=>(rank.get(a.id)??-1)-(rank.get(b.id)??-1)));
-  // --- geometry (real CSS pixels, no scaling) --------------------------------
-  const W=Math.max(200,Math.round((this.cardWidth||this.clientWidth||600)-32));
+  // --- geometry: port of HA's sankey-layout.ts (justify, pass-through nodes, space-around) ---
   const hasTitle=!!cfg.title;
-  const base=Number(cfg.grid_options?.rows)>0?Number(cfg.grid_options.rows)*56:(vertical?500:400);
-  const H=Math.max(160,base-(hasTitle?72+16:32));
-  const labelSpace=Math.max(40,W/sections-NODE-LABEL_DIST);
+  const W=this.chartW||Math.max(200,Math.round((this.cardWidth||this.clientWidth||600)-32));
+  const H=this.chartH||Math.max(120,(vertical?500:400)-(hasTitle?72+16:32));
+  const labelSpace=Math.max(30,W/sections-NODE-LABEL_DIST);
   const bottomSpace=showValues?LABEL_DIST+FONT*3+MARGIN:25;
-  const plotX=vertical?MARGIN:0,plotY=vertical?0:MARGIN;
-  const plotW=vertical?W-2*MARGIN:W-(labelSpace+LABEL_DIST);
-  const plotH=vertical?H-bottomSpace:H-2*MARGIN;
-  const along=vertical?plotH:plotW,across=vertical?plotW:plotH;
-  let ky=Infinity;
-  for(const col of columns){
-   const sum=col.reduce((s,n)=>s+n.value,0);
-   if(sum>0)ky=Math.min(ky,(across-(col.length-1)*GAP)/sum);
+  const left=vertical?MARGIN:0,top=vertical?0:MARGIN;
+  const across=vertical?W-2*MARGIN:H-2*MARGIN;
+  const plotAlong=vertical?H-bottomSpace:W;
+  const depthSize=plotAlong/sections;
+  const sectionSize=Math.max(20,across-GAP*2);
+  const nodeById=new Map(nodes.map(n=>[n.id,n]));
+  // pass-through nodes: a link spanning several sections occupies space in each one
+  const sectionItems=Array.from({length:sections},()=>[]);
+  for(const n of nodes)sectionItems[n.depth].push({id:n.id,value:n.value,rank:n.id==="root"?-1:(rank.get(n.id)??0),real:true});
+  for(const l of links){
+   const s=nodeById.get(l.source),t=nodeById.get(l.target);l.pts=[];
+   for(let d=s.depth+1;d<t.depth;d++){
+    const id="pt:"+l.source+">"+l.target+"@"+d;l.pts.push(id);
+    sectionItems[d].push({id,value:l.value,rank:rank.get(l.target)??0,real:false});
+   }
   }
-  if(!Number.isFinite(ky)||ky<=0)ky=1;
+  const setSizes=(items,avail,total,prev)=>{
+   let ratio=total/Math.max(1,avail);if(ratio<prev)ratio=prev;
+   let deficit=0;
+   const res=items.map(it=>{
+    if(it.size===1)return it;
+    let size=Math.floor(it.value/ratio);
+    if(size<1){deficit+=1-size;size=1;}
+    return {...it,size};
+   });
+   return deficit>0?setSizes(res,avail-deficit,total,ratio):{items:res,ratio};
+  };
+  let globalRatio=0;
+  const secs=sectionItems.map(list=>{
+   list.sort((a,b)=>a.rank-b.rank);
+   const items=list.map(x=>({...x,size:0})),total=items.reduce((s,x)=>s+x.value,0);
+   const r=setSizes(items,sectionSize-(items.length+1)*GAP,total,globalRatio);
+   if(r.ratio>globalRatio)globalRatio=r.ratio;
+   return r;
+  });
   const pos=new Map();
-  columns.forEach((col,i)=>{
-   const a=sections>1?i*(along-NODE)/(sections-1):0;
-   let c=0;
-   for(const n of col){
-    const size=Math.max(1,n.value*ky);
-    pos.set(n.id,vertical?{x:plotX+c,y:plotY+a,w:size,h:NODE,size}:{x:plotX+a,y:plotY+c,w:NODE,h:size,size});
-    c+=size+GAP;
+  secs.forEach((sec,i)=>{
+   if(sec.ratio!==globalRatio)for(const it of sec.items)it.size=Math.max(1,Math.floor(it.value/globalRatio));
+   const used=sec.items.reduce((s,x)=>s+x.size,0),empty=sectionSize-used,step=empty/(sec.items.length+1);
+   let off=step;
+   for(const it of sec.items){
+    const a=i*depthSize;
+    pos.set(it.id,vertical?{x:left+off,y:a,w:it.size,h:NODE,size:it.size,pitch:it.size+step,pt:!it.real}:{x:a,y:top+off,w:NODE,h:it.size,size:it.size,pitch:it.size+step,pt:!it.real});
+    off+=it.size+step;
    }
   });
-  const cross=id=>{const p=pos.get(id);return vertical?p.x:p.y;};
-  const nodeById=new Map(nodes.map(n=>[n.id,n]));
-  // link ports: outgoing ordered by target position, incoming by source position
-  const outOff=new Map(),inOff=new Map(),ordered=[];
-  const bySource=new Map(),byTarget=new Map();
+  const breadth=id=>{const p=pos.get(id);return vertical?p.x:p.y;};
+  // edge ports: thickness from the source node, ordered by neighbour position
+  const outs=new Map(),ins=new Map();
   for(const l of links){
-   if(!bySource.has(l.source))bySource.set(l.source,[]);bySource.get(l.source).push(l);
-   if(!byTarget.has(l.target))byTarget.set(l.target,[]);byTarget.get(l.target).push(l);
+   const s=pos.get(l.source),sv=nodeById.get(l.source).value;
+   l.size=l.value/Math.max(1e-9,sv)*s.size;
+   if(!outs.has(l.source))outs.set(l.source,[]);outs.get(l.source).push(l);
+   if(!ins.has(l.target))ins.set(l.target,[]);ins.get(l.target).push(l);
   }
-  for(const [id,list] of bySource){let o=0;list.sort((a,b)=>cross(a.target)-cross(b.target));for(const l of list){l.sOff=o;o+=l.value*ky;}}
-  for(const [id,list] of byTarget){let o=0;list.sort((a,b)=>cross(a.source)-cross(b.source));for(const l of list){l.tOff=o;o+=l.value*ky;}}
-  // --- links -----------------------------------------------------------------
+  for(const list of outs.values()){list.sort((a,b)=>breadth(a.target)-breadth(b.target));let o=0;for(const l of list){l.sOff=o;o+=l.size;}}
+  for(const list of ins.values()){list.sort((a,b)=>breadth(a.source)-breadth(b.source));let o=0;for(const l of list){l.tOff=o;o+=l.size;}}
+  // --- links (same bezier construction as HA's sankey-path.ts, curveness .5) ---
   let gradients="",paths="",bars="",labels="";
   const tipText=(a,b)=>esc(a+"\n"+b);
+  const CURVE=.5;
+  const seg=(a,b,type)=>type==="line"?' L'+b.x+' '+b.y:vertical?
+    ' C'+a.x+' '+(a.y*(1-CURVE)+b.y*CURVE)+','+b.x+' '+(b.y*(1-CURVE)+a.y*CURVE)+','+b.x+' '+b.y:
+    ' C'+(a.x*(1-CURVE)+b.x*CURVE)+' '+a.y+','+(b.x*(1-CURVE)+a.x*CURVE)+' '+b.y+','+b.x+' '+b.y;
   links.forEach((l,i)=>{
    const s=pos.get(l.source),t=pos.get(l.target),src=nodeById.get(l.source),tgt=nodeById.get(l.target);
    if(!s||!t||!(l.value>0))return;
-   const w=Math.max(.5,l.value*ky),gid="basedog-flow-"+i;
-   let d,x1,y1,x2,y2;
-   if(vertical){
-    const a0=s.x+l.sOff,b0=t.x+l.tOff,ya=s.y+s.h,yb=t.y,m=(ya+yb)/2;
-    d='M'+a0+' '+ya+' C'+a0+' '+m+','+b0+' '+m+','+b0+' '+yb+' L'+(b0+w)+' '+yb+' C'+(b0+w)+' '+m+','+(a0+w)+' '+m+','+(a0+w)+' '+ya+' Z';
-    x1=0;x2=0;y1=ya;y2=yb;
-   }else{
-    const a0=s.y+l.sOff,b0=t.y+l.tOff,xa=s.x+s.w,xb=t.x,m=(xa+xb)/2;
-    d='M'+xa+' '+a0+' C'+m+' '+a0+','+m+' '+b0+','+xb+' '+b0+' L'+xb+' '+(b0+w)+' C'+m+' '+(b0+w)+','+m+' '+(a0+w)+','+xa+' '+(a0+w)+' Z';
-    x1=xa;x2=xb;y1=0;y2=0;
+   const w=l.size;
+   const pts=[vertical?{x:s.x+l.sOff,y:s.y+s.h,type:"curve"}:{x:s.x+s.w,y:s.y+l.sOff,type:"curve"}];
+   for(const id of l.pts){
+    const p=pos.get(id);
+    pts.push({x:p.x,y:p.y,type:"curve"});
+    pts.push(vertical?{x:p.x,y:p.y+p.h,type:"line"}:{x:p.x+p.w,y:p.y,type:"line"});
    }
-   gradients+='<linearGradient id="'+gid+'" gradientUnits="userSpaceOnUse" x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'"><stop offset="0" stop-color="'+esc(src.color)+'"/><stop offset="1" stop-color="'+esc(tgt.color)+'"/></linearGradient>';
-   const tip=tipText(src.label+" → "+tgt.label,fmt(l.value));
-   paths+='<path class="sankey-hover" data-tip="'+tip+'" d="'+d+'" fill="url(#'+gid+')" fill-opacity=".4"></path>';
+   pts.push(vertical?{x:t.x+l.tOff,y:t.y,type:"curve"}:{x:t.x,y:t.y+l.tOff,type:"curve"});
+   const off=p=>vertical?{x:p.x+w,y:p.y}:{x:p.x,y:p.y+w};
+   let d='M'+pts[0].x+' '+pts[0].y;
+   for(let k=1;k<pts.length;k++)d+=seg(pts[k-1],pts[k],pts[k].type);
+   const last=off(pts[pts.length-1]);d+=' L'+last.x+' '+last.y;
+   for(let k=pts.length-2;k>=0;k--)d+=seg(off(pts[k+1]),off(pts[k]),pts[k+1].type);
+   d+=' Z';
+   const gid="basedog-flow-"+i,a=pts[0],b=pts[pts.length-1];
+   gradients+='<linearGradient id="'+gid+'" gradientUnits="userSpaceOnUse" x1="'+a.x+'" y1="'+a.y+'" x2="'+(vertical?a.x:b.x)+'" y2="'+(vertical?b.y:a.y)+'"><stop offset="0" stop-color="'+esc(src.color)+'"/><stop offset="1" stop-color="'+esc(tgt.color)+'"/></linearGradient>';
+   paths+='<path class="sankey-hover" data-tip="'+tipText(src.label+" → "+tgt.label,fmt(l.value))+'" d="'+d+'" fill="url(#'+gid+')" fill-opacity=".4"></path>';
   });
   // --- labels (wrapped, font reduced to fit, like the native labelLayout) -----
   const ctx=this._ctx||(this._ctx=document.createElement("canvas").getContext("2d"));
@@ -214,7 +252,7 @@ class BasedogEnergyCard extends HTMLElement{
    return lines;
   };
   const fit=(n,maxW,maxH)=>{
-   for(let fs=FONT;fs>=5;fs-=.5){
+   for(let fs=FONT;fs>=4;fs-=.5){
     const lines=wrap(n.label,fs,maxW);
     if(!lines)continue;
     if(showValues){if(width(fmt(n.value),fs)>maxW)continue;lines.push(fmt(n.value));}
@@ -232,13 +270,13 @@ class BasedogEnergyCard extends HTMLElement{
     const cx=p.x+p.w/2,lh=f.fs*1.2;
     labels+=f.lines.map((t,i)=>'<text x="'+cx+'" y="'+(p.y+p.h+LABEL_DIST+lh/2+i*lh)+'" text-anchor="middle" dominant-baseline="middle" font-size="'+f.fs+'">'+esc(t)+'</text>').join("");
    }else{
-    const f=fit(n,labelSpace,p.h+8);if(!f)continue;
+    const f=fit(n,labelSpace,Math.max(p.h+2,p.pitch-1));if(!f)continue;
     const cy=p.y+p.h/2,lh=f.fs*1.2,x=p.x+p.w+LABEL_DIST;
     labels+=f.lines.map((t,i)=>'<text x="'+x+'" y="'+(cy+(i-(f.lines.length-1)/2)*lh)+'" dominant-baseline="middle" font-size="'+f.fs+'">'+esc(t)+'</text>').join("");
    }
   }
   const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
-  return (assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<svg style="display:block;width:100%;height:'+H+'px;overflow:visible" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Sankey-Energieverbrauch"><defs>'+gradients+'</defs>'+paths+bars+labels+'</svg><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
+  return (assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="chart"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Sankey-Energieverbrauch"><defs>'+gradients+'</defs>'+paths+bars+labels+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
 }
 class BasedogEnergyEditor extends HTMLElement{

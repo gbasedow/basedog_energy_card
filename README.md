@@ -108,3 +108,7 @@ Optik an die native Home-Assistant-Karte angepasst: Standard-Kartenkopf (`ha-car
 ## Version 0.18.0
 
 Diagramm nach dem Vorbild der nativen Home-Assistant-Energiekarte (`ha-sankey-chart.ts`, ECharts-Sankey) neu aufgebaut: Knotenbreite 15 px, 6 px Knotenabstand, eine gemeinsame Skala für alle Spalten, Knoten oben gestapelt, Bänder mit 40 % Deckkraft und Farbverlauf, Beschriftungen in 12 px rechts neben dem Knoten (vertikale Ansicht: unterhalb, Schrift passt sich an) und ein einzelner grauer Knoten „Nicht erfasster Verbrauch". Etagen und Bereiche nutzen `--primary-color`, die Verbraucher die Theme-Farben `--graph-color-N`. Das Diagramm wird in echten Pixeln gezeichnet (Kartenhöhe wie nativ 400 px, vertikal 500 px). Die Zusammenfassungszeile entfällt. Neue Option `show_values` (Standard `false`, wie nativ) blendet kWh-Werte in den Beschriftungen ein.
+
+## Version 0.19.0
+
+Layout 1:1 nach dem eigenen Sankey-Layout der Home-Assistant-Frontend-Quellen (`sankey-layout.ts`, `sankey-path.ts`) umgebaut: Pass-through-Knoten (der Strang „Nicht erfasster Verbrauch" läuft durch jede Spalte), mittig verteilte Knoten („space-around"), globale Wert-zu-Pixel-Skala mit 1 px Mindestgröße, Spaltenabstand Breite/Spaltenzahl und Bänder mit konstanter Dicke. Die Karte füllt in Abschnitts-Dashboards wie die native Karte die Grid-Höhe (`getGridOptions`: 12 Spalten, 6 Zeilen), sonst 400 px (vertikal 500 px). Beschriftungen passen sich dem Knotenabstand an und überlappen nicht mehr.
