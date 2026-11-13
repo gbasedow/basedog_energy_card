@@ -1,6 +1,6 @@
 {
   "name": "basedog_energy_card",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "private": true,
   "description": "Home Assistant energy Sankey Lovelace card",
   "scripts": {
