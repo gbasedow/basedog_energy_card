@@ -38,7 +38,7 @@ labels:                             # nur bei source: labels
 # entities:                         # nur bei source: entities (nur Energie-Entitäten)
 #   - sensor.kuehlschrank_energie
 show_date_picker: true              # Datumsauswahl unten; ohne: immer heute
-levels: [floor, area, entity]
+detail: entity                      # Start-Detailtiefe: floor | area | entity
 orientation: auto                   # auto | vertical | horizontal
 show_labels: true
 show_values: false
@@ -159,3 +159,8 @@ Erste stabile Version, entspricht funktional 0.24.0:
 - Ebenen Etage → Bereich → Entität einzeln abschaltbar.
 - Zusammenfassen kleiner Werte nach Schwelle (über 1–3 Ebenen) oder Top N.
 - Schalter für Beschriftung und Energiewerte, Tooltips, aufklappbare Liste nicht auswertbarer Entitäten.
+
+## Version 1.1.0
+
+- Neues Dropdown **Detailtiefe** unten links neben der Datumsauswahl: Stockwerk, Bereich oder Entität (kumulativ). Die untere Leiste wird dafür immer angezeigt; die Datumselemente nur bei eingeschalteter Datumsauswahl.
+- Der Menüpunkt „Ebenen“ im Karteneditor entfällt. Eine bestehende `levels`-Einstellung wird als Start-Detailtiefe übernommen (`detail`).
