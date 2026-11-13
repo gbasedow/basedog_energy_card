@@ -104,3 +104,7 @@ Sankey-Layout nach Analyse des nativen Home-Assistant-Frontend-Codes (`ha-sankey
 ## Version 0.17.0
 
 Optik an die native Home-Assistant-Karte angepasst: Standard-Kartenkopf (`ha-card`-Header-Schriftart und -größe), kein Versionsbadge und kein Aktualisieren-Button mehr im Kopf (die Version steht weiterhin im Karteneditor), Home-Assistant-Schriftart in den Diagrammbeschriftungen, keine Verzerrung des Diagramms mehr durch gestrecktes SVG, dezenter Hover-Effekt auf den Flussbändern. Die Zusammenfassungszeile steht jetzt unter dem Diagramm.
+
+## Version 0.18.0
+
+Diagramm nach dem Vorbild der nativen Home-Assistant-Energiekarte (`ha-sankey-chart.ts`, ECharts-Sankey) neu aufgebaut: Knotenbreite 15 px, 6 px Knotenabstand, eine gemeinsame Skala für alle Spalten, Knoten oben gestapelt, Bänder mit 40 % Deckkraft und Farbverlauf, Beschriftungen in 12 px rechts neben dem Knoten (vertikale Ansicht: unterhalb, Schrift passt sich an) und ein einzelner grauer Knoten „Nicht erfasster Verbrauch". Etagen und Bereiche nutzen `--primary-color`, die Verbraucher die Theme-Farben `--graph-color-N`. Das Diagramm wird in echten Pixeln gezeichnet (Kartenhöhe wie nativ 400 px, vertikal 500 px). Die Zusammenfassungszeile entfällt. Neue Option `show_values` (Standard `false`, wie nativ) blendet kWh-Werte in den Beschriftungen ein.
