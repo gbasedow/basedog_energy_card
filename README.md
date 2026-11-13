@@ -136,3 +136,10 @@ Die Karte füllt in Abschnitts-Dashboards die komplette Grid-Zelle (der Host üb
 - Tagesenergie aus der Summe der stündlichen Änderungen (vorher fehlte die erste Stunde), Umrechnung nach kWh durch Home Assistant.
 - Kleine Werte können über 1 bis 3 Ebenen zusammengefasst werden (`group_levels`).
 - Editor auf Basis von `ha-form` neu aufgebaut.
+
+## Version 0.23.0
+
+- Schwellwert für das Zusammenfassen akzeptiert beliebige Dezimalzahlen (z. B. 0,05 kWh).
+- Die Liste „Entitäten ohne auswertbare Energie-Statistiken“ lässt sich aufklappen und bleibt beim minütlichen Aktualisieren offen; sie zeigt Name und Entitäts-ID und ist scrollbar.
+- Sehr kleine Flüsse (z. B. „Speicher“) werden wie die Knoten mit mindestens 1 px gezeichnet, die Linie ist dadurch durchgehend.
+- Schalter „Beschriftung anzeigen“ und „Energiewerte (kWh) anzeigen“ stehen im Editor direkt unter der Quellauswahl. Passen Name und Wert nicht zweizeilig, wird „Name · Wert“ einzeilig versucht.
