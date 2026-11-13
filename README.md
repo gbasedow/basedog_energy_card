@@ -112,3 +112,7 @@ Diagramm nach dem Vorbild der nativen Home-Assistant-Energiekarte (`ha-sankey-ch
 ## Version 0.19.0
 
 Layout 1:1 nach dem eigenen Sankey-Layout der Home-Assistant-Frontend-Quellen (`sankey-layout.ts`, `sankey-path.ts`) umgebaut: Pass-through-Knoten (der Strang „Nicht erfasster Verbrauch" läuft durch jede Spalte), mittig verteilte Knoten („space-around"), globale Wert-zu-Pixel-Skala mit 1 px Mindestgröße, Spaltenabstand Breite/Spaltenzahl und Bänder mit konstanter Dicke. Die Karte füllt in Abschnitts-Dashboards wie die native Karte die Grid-Höhe (`getGridOptions`: 12 Spalten, 6 Zeilen), sonst 400 px (vertikal 500 px). Beschriftungen passen sich dem Knotenabstand an und überlappen nicht mehr.
+
+## Version 0.19.1
+
+Fix: In Dashboards mit sehr kleiner oder automatischer Kartenhöhe (Abschnittsansicht) wurde in 0.19.0 nur der Titel angezeigt, weil der Diagrammbereich die Höhe 0 hatte. Der Diagrammbereich hat jetzt eine Mindesthöhe von 200 px (Grid-Karte mindestens 300 px).
