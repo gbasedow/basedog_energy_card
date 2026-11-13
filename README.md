@@ -116,3 +116,7 @@ Layout 1:1 nach dem eigenen Sankey-Layout der Home-Assistant-Frontend-Quellen (`
 ## Version 0.19.1
 
 Fix: In Dashboards mit sehr kleiner oder automatischer Kartenhöhe (Abschnittsansicht) wurde in 0.19.0 nur der Titel angezeigt, weil der Diagrammbereich die Höhe 0 hatte. Der Diagrammbereich hat jetzt eine Mindesthöhe von 200 px (Grid-Karte mindestens 300 px).
+
+## Version 0.20.0
+
+Die komplette Kartenfläche wird genutzt: Horizontal reicht die letzte Spalte inklusive Beschriftung bis an den rechten Rand, vertikal die letzte Reihe bis an den unteren Rand. Der Platz für die letzten Beschriftungen wird gemessen statt pauschal reserviert, alle Spalten bzw. Reihen werden gleichmäßig bis dorthin verteilt.

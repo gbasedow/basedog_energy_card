@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.19.1 */
-const CARD_VERSION="0.19.1";
+/* basedog_energy_card v0.20.0 */
+const CARD_VERSION="0.20.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,show_values:false,orientation:"auto",group_below_kwh:0};
@@ -146,16 +146,34 @@ class BasedogEnergyCard extends HTMLElement{
   walk("root");
   const sections=lastDepth+1;
   const columns=Array.from({length:sections},(_,i)=>nodes.filter(n=>n.depth===i).sort((a,b)=>(rank.get(a.id)??-1)-(rank.get(b.id)??-1)));
+  const ctx=this._ctx||(this._ctx=document.createElement("canvas").getContext("2d"));
+  const FAMILY="Roboto, Noto, sans-serif";
+  const width=(text,fs)=>{ctx.font=fs+"px "+FAMILY;return ctx.measureText(text).width;};
+  const wrap=(text,fs,maxW)=>{
+   const lines=[];let cur="";
+   for(const word of String(text).split(/\s+/).filter(Boolean)){
+    if(width(word,fs)>maxW)return null;
+    const next=cur?cur+" "+word:word;
+    if(cur&&width(next,fs)>maxW){lines.push(cur);cur=word;}else cur=next;
+   }
+   if(cur)lines.push(cur);
+   return lines;
+  };
+  const fit=(n,maxW,maxH)=>{
+   for(let fs=FONT;fs>=4;fs-=.5){
+    const lines=wrap(n.label,fs,maxW);
+    if(!lines)continue;
+    if(showValues){if(width(fmt(n.value),fs)>maxW)continue;lines.push(fmt(n.value));}
+    if(vertical?lines.length<=3:lines.length*fs*1.2<=maxH)return {fs,lines};
+   }
+   return null;
+  };
   // --- geometry: port of HA's sankey-layout.ts (justify, pass-through nodes, space-around) ---
   const hasTitle=!!cfg.title;
   const W=this.chartW||Math.max(200,Math.round((this.cardWidth||this.clientWidth||600)-32));
   const H=this.chartH||Math.max(120,(vertical?500:400)-(hasTitle?72+16:32));
-  const labelSpace=Math.max(30,W/sections-NODE-LABEL_DIST);
-  const bottomSpace=showValues?LABEL_DIST+FONT*3+MARGIN:25;
   const left=vertical?MARGIN:0,top=vertical?0:MARGIN;
   const across=vertical?W-2*MARGIN:H-2*MARGIN;
-  const plotAlong=vertical?H-bottomSpace:W;
-  const depthSize=plotAlong/sections;
   const sectionSize=Math.max(20,across-GAP*2);
   const nodeById=new Map(nodes.map(n=>[n.id,n]));
   // pass-through nodes: a link spanning several sections occupies space in each one
@@ -193,11 +211,31 @@ class BasedogEnergyCard extends HTMLElement{
    const used=sec.items.reduce((s,x)=>s+x.size,0),empty=sectionSize-used,step=empty/(sec.items.length+1);
    let off=step;
    for(const it of sec.items){
-    const a=i*depthSize;
-    pos.set(it.id,vertical?{x:left+off,y:a,w:it.size,h:NODE,size:it.size,pitch:it.size+step,pt:!it.real}:{x:a,y:top+off,w:NODE,h:it.size,size:it.size,pitch:it.size+step,pt:!it.real});
+    const a=0;
+    pos.set(it.id,vertical?{x:left+off,y:a,w:it.size,h:NODE,size:it.size,pitch:it.size+step,pt:!it.real,idx:i}:{x:a,y:top+off,w:NODE,h:it.size,size:it.size,pitch:it.size+step,pt:!it.real,idx:i});
     off+=it.size+step;
    }
   });
+  // use the complete width (horizontal) / height (vertical): the last row/column
+  // gets exactly the space its labels need, all sections are spread evenly up to it.
+  const labelsOn=cfg.show_labels!==false;
+  let lastLabelW=0,bottomSpace=MARGIN;
+  if(labelsOn){
+   const lastNodes=nodes.filter(n=>n.depth===lastDepth);
+   if(vertical){
+    let need=0;
+    for(const n of lastNodes){const p=pos.get(n.id),f=fit(n,Math.max(1,p.w+6-MARGIN),Infinity);if(f)need=Math.max(need,f.lines.length*f.fs*1.2);}
+    bottomSpace=need?LABEL_DIST+need+MARGIN:MARGIN;
+   }else{
+    for(const n of lastNodes){let w=width(n.label,FONT);if(showValues)w=Math.max(w,width(fmt(n.value),FONT));lastLabelW=Math.max(lastLabelW,w);}
+    lastLabelW=Math.min(Math.ceil(lastLabelW)+2,Math.max(60,W*.35));
+   }
+  }
+  const lastAlong=vertical?H-NODE-bottomSpace:W-NODE-(labelsOn?LABEL_DIST+lastLabelW:0);
+  const depthSize=Math.max(1,lastAlong)/(sections-1);
+  const labelSpace=lastLabelW||Math.max(30,depthSize-NODE-LABEL_DIST);
+  for(const p of pos.values()){if(vertical)p.y=p.idx*depthSize;else p.x=p.idx*depthSize;}
+  const labelSpaceFor=n=>n.depth===lastDepth?Math.max(30,lastLabelW):Math.max(30,depthSize-NODE-LABEL_DIST);
   const breadth=id=>{const p=pos.get(id);return vertical?p.x:p.y;};
   // edge ports: thickness from the source node, ordered by neighbour position
   const outs=new Map(),ins=new Map();
@@ -238,28 +276,6 @@ class BasedogEnergyCard extends HTMLElement{
    paths+='<path class="sankey-hover" data-tip="'+tipText(src.label+" → "+tgt.label,fmt(l.value))+'" d="'+d+'" fill="url(#'+gid+')" fill-opacity=".4"></path>';
   });
   // --- labels (wrapped, font reduced to fit, like the native labelLayout) -----
-  const ctx=this._ctx||(this._ctx=document.createElement("canvas").getContext("2d"));
-  const FAMILY="Roboto, Noto, sans-serif";
-  const width=(text,fs)=>{ctx.font=fs+"px "+FAMILY;return ctx.measureText(text).width;};
-  const wrap=(text,fs,maxW)=>{
-   const lines=[];let cur="";
-   for(const word of String(text).split(/\s+/).filter(Boolean)){
-    if(width(word,fs)>maxW)return null;
-    const next=cur?cur+" "+word:word;
-    if(cur&&width(next,fs)>maxW){lines.push(cur);cur=word;}else cur=next;
-   }
-   if(cur)lines.push(cur);
-   return lines;
-  };
-  const fit=(n,maxW,maxH)=>{
-   for(let fs=FONT;fs>=4;fs-=.5){
-    const lines=wrap(n.label,fs,maxW);
-    if(!lines)continue;
-    if(showValues){if(width(fmt(n.value),fs)>maxW)continue;lines.push(fmt(n.value));}
-    if(vertical?lines.length<=3:lines.length*fs*1.2<=maxH)return {fs,lines};
-   }
-   return null;
-  };
   for(const n of nodes){
    const p=pos.get(n.id);if(!p)continue;
    const tip=tipText(n.label,fmt(n.value));
@@ -270,7 +286,7 @@ class BasedogEnergyCard extends HTMLElement{
     const cx=p.x+p.w/2,lh=f.fs*1.2;
     labels+=f.lines.map((t,i)=>'<text x="'+cx+'" y="'+(p.y+p.h+LABEL_DIST+lh/2+i*lh)+'" text-anchor="middle" dominant-baseline="middle" font-size="'+f.fs+'">'+esc(t)+'</text>').join("");
    }else{
-    const f=fit(n,labelSpace,Math.max(p.h+2,p.pitch-1));if(!f)continue;
+    const f=fit(n,labelSpaceFor(n),Math.max(p.h+2,p.pitch-1));if(!f)continue;
     const cy=p.y+p.h/2,lh=f.fs*1.2,x=p.x+p.w+LABEL_DIST;
     labels+=f.lines.map((t,i)=>'<text x="'+x+'" y="'+(cy+(i-(f.lines.length-1)/2)*lh)+'" dominant-baseline="middle" font-size="'+f.fs+'">'+esc(t)+'</text>').join("");
    }
