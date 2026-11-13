@@ -143,3 +143,8 @@ Die Karte füllt in Abschnitts-Dashboards die komplette Grid-Zelle (der Host üb
 - Die Liste „Entitäten ohne auswertbare Energie-Statistiken“ lässt sich aufklappen und bleibt beim minütlichen Aktualisieren offen; sie zeigt Name und Entitäts-ID und ist scrollbar.
 - Sehr kleine Flüsse (z. B. „Speicher“) werden wie die Knoten mit mindestens 1 px gezeichnet, die Linie ist dadurch durchgehend.
 - Schalter „Beschriftung anzeigen“ und „Energiewerte (kWh) anzeigen“ stehen im Editor direkt unter der Quellauswahl. Passen Name und Wert nicht zweizeilig, wird „Name · Wert“ einzeilig versucht.
+
+## Version 0.24.0
+
+- Datumsleiste: Datum, „Heute“ und die Pfeile stehen rechtsbündig nebeneinander.
+- Neue Option „Zusammenfassen nach“: **Wert (Schwelle)** wie bisher oder **Top N** (`group_mode: top`, `top_n: 10`). Bei Top N bleiben die N größten Verbraucher mit Etage/Bereich erhalten, alle übrigen werden zu einem Knoten „Zusammengefasst (k)“ gebündelt.
