@@ -120,3 +120,7 @@ Fix: In Dashboards mit sehr kleiner oder automatischer Kartenhöhe (Abschnittsan
 ## Version 0.20.0
 
 Die komplette Kartenfläche wird genutzt: Horizontal reicht die letzte Spalte inklusive Beschriftung bis an den rechten Rand, vertikal die letzte Reihe bis an den unteren Rand. Der Platz für die letzten Beschriftungen wird gemessen statt pauschal reserviert, alle Spalten bzw. Reihen werden gleichmäßig bis dorthin verteilt.
+
+## Version 0.20.1
+
+Fix: Die berechnete Schriftverkleinerung der Beschriftungen wurde durch eine CSS-Regel überschrieben, alle Texte erschienen immer in 12 px. Dadurch überlappten sich Beschriftungen und ragten über den Rand. Außerdem reserviert die Karte rechts jetzt nur die Breite, die die (verkleinerten) Beschriftungen tatsächlich brauchen, sodass das Diagramm die volle Breite nutzt. Canvas-Messung und Darstellung nutzen dieselbe Schriftliste (`Roboto, Noto, sans-serif`).
