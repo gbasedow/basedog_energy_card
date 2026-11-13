@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.24.0 */
-const CARD_VERSION="0.24.0";
+/* basedog_energy_card v1.0.0 */
+const CARD_VERSION="1.0.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",source:"energy",levels:[...ORDER],show_date_picker:false,show_labels:true,show_values:false,orientation:"auto",group_mode:"value",group_below_kwh:0,group_levels:1,top_n:10};

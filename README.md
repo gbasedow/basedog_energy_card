@@ -1,6 +1,6 @@
 # basedog_energy_card
 
-Eine experimentelle Home-Assistant-Lovelace-Karte zur Darstellung von **Energieverbrauch als Sankey-Diagramm**.
+Eine Home-Assistant-Lovelace-Karte zur Darstellung des **Tagesenergieverbrauchs als Sankey-Diagramm** im Stil der nativen Energiekarte.
 
 ## Funktionen
 
@@ -148,3 +148,14 @@ Die Karte füllt in Abschnitts-Dashboards die komplette Grid-Zelle (der Host üb
 
 - Datumsleiste: Datum, „Heute“ und die Pfeile stehen rechtsbündig nebeneinander.
 - Neue Option „Zusammenfassen nach“: **Wert (Schwelle)** wie bisher oder **Top N** (`group_mode: top`, `top_n: 10`). Bei Top N bleiben die N größten Verbraucher mit Etage/Bereich erhalten, alle übrigen werden zu einem Knoten „Zusammengefasst (k)“ gebündelt.
+
+## Version 1.0.0
+
+Erste stabile Version, entspricht funktional 0.24.0:
+
+- Sankey-Layout nach dem Vorbild der nativen Home-Assistant-Energiekarte, horizontal und vertikal, füllt die Grid-Zelle vollständig.
+- Quelle der Verbraucher: Energie-Dashboard, Labels oder Entitäten (HA-Auswahldialoge, nur Energie-Entitäten).
+- Tagesverbrauch mit optionaler, dezenter Datumsleiste.
+- Ebenen Etage → Bereich → Entität einzeln abschaltbar.
+- Zusammenfassen kleiner Werte nach Schwelle (über 1–3 Ebenen) oder Top N.
+- Schalter für Beschriftung und Energiewerte, Tooltips, aufklappbare Liste nicht auswertbarer Entitäten.
