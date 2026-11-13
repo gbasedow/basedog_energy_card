@@ -124,3 +124,7 @@ Die komplette Kartenfläche wird genutzt: Horizontal reicht die letzte Spalte in
 ## Version 0.20.1
 
 Fix: Die berechnete Schriftverkleinerung der Beschriftungen wurde durch eine CSS-Regel überschrieben, alle Texte erschienen immer in 12 px. Dadurch überlappten sich Beschriftungen und ragten über den Rand. Außerdem reserviert die Karte rechts jetzt nur die Breite, die die (verkleinerten) Beschriftungen tatsächlich brauchen, sodass das Diagramm die volle Breite nutzt. Canvas-Messung und Darstellung nutzen dieselbe Schriftliste (`Roboto, Noto, sans-serif`).
+
+## Version 0.21.0
+
+Die Karte füllt in Abschnitts-Dashboards die komplette Grid-Zelle (der Host übernimmt die Zellenhöhe). Der Diagrammbereich wird per ResizeObserver beobachtet: Wenn Home Assistant die Zelle nach dem ersten Rendern vergrößert oder verkleinert (Grid-Layout, Bearbeitungsmodus, Fenstergröße), wird das Diagramm mit den neuen Maßen neu gezeichnet. Vorher blieb das SVG auf der alten Größe und wurde verkleinert und zentriert dargestellt, sodass links und rechts Platz frei blieb.

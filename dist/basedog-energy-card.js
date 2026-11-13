@@ -1,5 +1,5 @@
-/* basedog_energy_card v0.20.1 */
-const CARD_VERSION="0.20.1";
+/* basedog_energy_card v0.21.0 */
+const CARD_VERSION="0.21.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
 const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,show_values:false,orientation:"auto",group_below_kwh:0};
@@ -28,7 +28,7 @@ class BasedogEnergyCard extends HTMLElement{
  static getStubConfig(){return {...DEFAULT};}
  setConfig(c){const next=normalize(c),sig=JSON.stringify(next);this.config=next;this.vertical=next.orientation==="vertical"||next.orientation!=="horizontal"&&(this.cardWidth||this.clientWidth)<700;if(sig!==this._signature){this._signature=sig;this.last=0;this.render();this.load();}}
  set hass(h){this._h=h;if(Date.now()-this.last>60000)this.load();}
- disconnectedCallback(){this.resizeObserver?.disconnect();}
+ disconnectedCallback(){this.resizeObserver?.disconnect();this._chartRO?.disconnect();}
  connectedCallback(){this.resizeObserver?.observe(this);}
  getCardSize(){return 5;}
  getGridOptions(){return {columns:12,min_columns:6,rows:6,min_rows:2};}
@@ -80,12 +80,17 @@ class BasedogEnergyCard extends HTMLElement{
  }
  render(){
   const c=this.config,r=this.result;
-  const css='<style>:host{display:block}ha-card{height:400px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}ha-card.is-vertical{height:500px}ha-card.is-grid,ha-card.is-panel{height:100%;min-height:300px}.content{flex:1;display:flex;flex-direction:column;min-height:0;box-sizing:border-box}.chart{flex:1;position:relative;min-height:200px;min-width:0}.chart svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:Roboto,Noto,sans-serif;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
+  const css='<style>:host{display:block;height:100%}ha-card{height:400px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}ha-card.is-vertical{height:500px}ha-card.is-grid,ha-card.is-panel{height:100%;min-height:300px}.content{flex:1;display:flex;flex-direction:column;min-height:0;box-sizing:border-box}.chart{flex:1;position:relative;min-height:200px;min-width:0}.chart svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:Roboto,Noto,sans-serif;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
   const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
   this.shadowRoot.innerHTML=css+'<ha-card class="'+(this.vertical?"is-vertical ":"")+(this._layout==="grid"?"is-grid":this._layout==="panel"?"is-panel":"")+'">'+(c.title?'<div class="card-header">'+esc(c.title)+'</div>':'')+'<div class="content">'+body+'</div></ha-card>';
   {const ch=this.shadowRoot.querySelector(".chart");
    if(ch&&!this._measuring){const w=Math.round(ch.clientWidth),h=Math.round(ch.clientHeight);
-    if(w>0&&h>0&&(Math.abs(w-(this.chartW||0))>1||Math.abs(h-(this.chartH||0))>1)){this.chartW=w;this.chartH=h;this._measuring=true;try{this.render();}finally{this._measuring=false;}return;}}}
+    if(w>0&&h>0&&(Math.abs(w-(this.chartW||0))>1||Math.abs(h-(this.chartH||0))>1)){this.chartW=w;this.chartH=h;this._measuring=true;try{this.render();}finally{this._measuring=false;}return;}}
+   // keep the SVG in sync with the real chart box: HA resizes grid cells after the first render
+   this._chartRO?.disconnect();
+   if(ch){this._chartRO=new ResizeObserver(entries=>{const r=entries[0]?.contentRect;if(!r)return;const w=Math.round(r.width),h=Math.round(r.height);
+    if(w>0&&h>0&&(Math.abs(w-(this.chartW||0))>1||Math.abs(h-(this.chartH||0))>1)){this.chartW=w;this.chartH=h;cancelAnimationFrame(this._raf);this._raf=requestAnimationFrame(()=>this.render());}});
+    this._chartRO.observe(ch);}}
   const tip=this.shadowRoot.querySelector("#sankey-tip");
   if(tip){
    const svg=this.shadowRoot.querySelector("svg");
@@ -297,7 +302,7 @@ class BasedogEnergyCard extends HTMLElement{
    }
   }
   const missing=data.missing.length?'<details><summary class="warning">'+data.missing.length+' ausgewählte Entitäten ohne auswertbare Energie-Statistiken</summary><ul>'+data.missing.map(id=>'<li>'+esc(id)+'</li>').join("")+'</ul></details>':"";
-  return (assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="chart"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Sankey-Energieverbrauch"><defs>'+gradients+'</defs>'+paths+bars+labels+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
+  return (assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="chart"><svg preserveAspectRatio="xMinYMin meet" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Sankey-Energieverbrauch"><defs>'+gradients+'</defs>'+paths+bars+labels+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
 }
 class BasedogEnergyEditor extends HTMLElement{
