@@ -26,28 +26,28 @@ Alternativ kann die Ressource `dist/basedog-energy-card.js` als JavaScript-Modul
 
 ## Konfiguration
 
-Alle Felder sind im visuellen Editor verfügbar. Beispiel-YAML:
+Alle Felder sind im visuellen Editor verfügbar (Auswahldialoge von Home Assistant für Entitäten und Labels). Beispiel-YAML:
 
 ```yaml
 type: custom:basedog-energy-card
 title: Energiefluss
-entity: sensor.gesamtenergie
-entities:
-  - sensor.wohnzimmer_energie
-  - sensor.kueche_energie
-labels:
+entity: sensor.gesamtenergie        # zentrale Energieentität (Gesamtverbrauch)
+source: labels                      # energy | labels | entities
+labels:                             # nur bei source: labels
   - stromverbrauch
-duration: 24
-duration_unit: hours
-time_mode: now
-end_time: ""
-levels:
-  - floor
-  - area
-  - entity
+# entities:                         # nur bei source: entities (nur Energie-Entitäten)
+#   - sensor.kuehlschrank_energie
+show_date_picker: true              # Datumsauswahl unten; ohne: immer heute
+levels: [floor, area, entity]
+orientation: auto                   # auto | vertical | horizontal
+show_labels: true
+show_values: false
+group_below_kwh: 0.1                # kleine Werte zusammenfassen (0 = aus)
+group_levels: 2                     # 1 = Entitäten, 2 = + Bereiche, 3 = + Etagen
 ```
 
-`time_mode: fixed` verwendet den in `end_time` gewählten Zeitpunkt statt „Jetzt“.
+- `source: energy` übernimmt die Geräte aus den Energie-Einstellungen (Energie-Dashboard). Untergeräte (`included_in_stat`) werden übersprungen, um Doppelzählung zu vermeiden.
+- Dargestellt wird immer der Verbrauch eines Kalendertages (lokale Zeit), beim heutigen Tag bis jetzt.
 
 ## Voraussetzungen und Einschränkungen
 
@@ -128,3 +128,11 @@ Fix: Die berechnete Schriftverkleinerung der Beschriftungen wurde durch eine CSS
 ## Version 0.21.0
 
 Die Karte füllt in Abschnitts-Dashboards die komplette Grid-Zelle (der Host übernimmt die Zellenhöhe). Der Diagrammbereich wird per ResizeObserver beobachtet: Wenn Home Assistant die Zelle nach dem ersten Rendern vergrößert oder verkleinert (Grid-Layout, Bearbeitungsmodus, Fenstergröße), wird das Diagramm mit den neuen Maßen neu gezeichnet. Vorher blieb das SVG auf der alten Größe und wurde verkleinert und zentriert dargestellt, sodass links und rechts Platz frei blieb.
+
+## Version 0.22.0
+
+- Quelle der Verbraucher wählbar: **Energie-Dashboard**, **Labels** oder **Entitäten**. Labels und Entitäten werden mit den Auswahldialogen von Home Assistant gewählt, Entitäten nur aus Energie-Sensoren. Bestehende Konfigurationen werden automatisch übernommen (nur Labels → Modus Labels).
+- Immer Tagesverbrauch. Optional eine kleine Datumsleiste unten (Datum, „Heute“, vorheriger/nächster Tag). Ohne Leiste wird immer der heutige Tag angezeigt. Die Optionen Dauer/Einheit/Bezugszeitpunkt entfallen.
+- Tagesenergie aus der Summe der stündlichen Änderungen (vorher fehlte die erste Stunde), Umrechnung nach kWh durch Home Assistant.
+- Kleine Werte können über 1 bis 3 Ebenen zusammengefasst werden (`group_levels`).
+- Editor auf Basis von `ha-form` neu aufgebaut.

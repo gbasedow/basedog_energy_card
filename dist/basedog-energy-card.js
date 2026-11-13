@@ -1,22 +1,40 @@
-/* basedog_energy_card v0.21.0 */
-const CARD_VERSION="0.21.0";
+/* basedog_energy_card v0.22.0 */
+const CARD_VERSION="0.22.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
-const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",entities:[],labels:[],duration:24,duration_unit:"hours",time_mode:"now",end_time:"",levels:[...ORDER],show_labels:true,show_values:false,orientation:"auto",group_below_kwh:0};
-const UNITS={Wh:.001,kWh:1,MWh:1000,J:1/3600000,kJ:1/3600,MJ:1/3.6};
-const DURATIONS={minutes:60000,hours:3600000,days:86400000,weeks:604800000};
+const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",source:"energy",levels:[...ORDER],show_date_picker:false,show_labels:true,show_values:false,orientation:"auto",group_below_kwh:0,group_levels:1};
+const SOURCES=["energy","labels","entities"];
+const UNITS={Wh:.001,kWh:1,MWh:1000,GJ:1/0.0036,MJ:1/3.6,kJ:1/3600,J:1/3600000};
+const LEGACY=["duration","duration_unit","time_mode","end_time"];
+const dayStart=d=>{const x=new Date(d);x.setHours(0,0,0,0);return x;};
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return dayStart(x);};
+const isoDay=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const unique=a=>[...new Set(a||[])];
 const activeLevels=c=>ORDER.filter(x=>(Array.isArray(c.levels)?c.levels:ORDER).includes(x));
-const kwh=(v,unit)=>Object.hasOwn(UNITS,unit)?v*UNITS[unit]:null;
+// Energy of the period: sum of the hourly changes (the sum-difference would drop the first hour).
 function delta(points){
  if(!Array.isArray(points)||!points.length)return null;
- const sums=points.filter(p=>p.sum!=null&&Number.isFinite(Number(p.sum)));
- if(sums.length>=2)return Math.max(0,Number(sums.at(-1).sum)-Number(sums[0].sum));
  const changes=points.filter(p=>p.change!=null&&Number.isFinite(Number(p.change)));
- return changes.length?Math.max(0,changes.reduce((n,p)=>n+Number(p.change),0)):null;
+ if(changes.length)return Math.max(0,changes.reduce((n,p)=>n+Number(p.change),0));
+ const sums=points.filter(p=>p.sum!=null&&Number.isFinite(Number(p.sum)));
+ return sums.length>=2?Math.max(0,Number(sums.at(-1).sum)-Number(sums[0].sum)):null;
 }
-function normalize(c){return {...DEFAULT,...c,levels:activeLevels(c),entities:unique(c.entities),labels:unique(c.labels)};}
+function normalize(c={}){
+ const out={...DEFAULT,...c};
+ for(const k of LEGACY)delete out[k];
+ const labels=unique(c.labels),entities=unique(c.entities);
+ // migrate configs from before the source option: labels win if only labels were used
+ out.source=SOURCES.includes(c.source)?c.source:entities.length?"entities":labels.length?"labels":"energy";
+ delete out.labels;delete out.entities;
+ if(out.source==="labels")out.labels=labels;
+ if(out.source==="entities")out.entities=entities;
+ out.levels=activeLevels(c);
+ out.group_below_kwh=Math.max(0,Number(out.group_below_kwh)||0);
+ out.group_levels=Math.min(3,Math.max(1,Math.round(Number(out.group_levels)||1)));
+ out.show_date_picker=out.show_date_picker===true;
+ return out;
+}
 function place(r,devices,areas,floors){
  const d=devices.get(r?.device_id),a=areas.get(r?.area_id||d?.area_id);
  const f=floors.get(a?.floor_id);
@@ -27,7 +45,9 @@ class BasedogEnergyCard extends HTMLElement{
  static getConfigElement(){return document.createElement("basedog-energy-card-editor");}
  static getStubConfig(){return {...DEFAULT};}
  setConfig(c){const next=normalize(c),sig=JSON.stringify(next);this.config=next;this.vertical=next.orientation==="vertical"||next.orientation!=="horizontal"&&(this.cardWidth||this.clientWidth)<700;if(sig!==this._signature){this._signature=sig;this.last=0;this.render();this.load();}}
- set hass(h){this._h=h;if(Date.now()-this.last>60000)this.load();}
+ set hass(h){this._h=h;const today=!this.config.show_date_picker||!this._day||+this._day===+dayStart(new Date());
+  if(!this.last||(today&&Date.now()-this.last>60000))this.load();}
+ setDay(d){const today=dayStart(new Date());d=dayStart(d);if(d>today)d=today;this._day=d;this.result=null;this.last=0;this.render();this.load();}
  disconnectedCallback(){this.resizeObserver?.disconnect();this._chartRO?.disconnect();}
  connectedCallback(){this.resizeObserver?.observe(this);}
  getCardSize(){return 5;}
@@ -35,12 +55,13 @@ class BasedogEnergyCard extends HTMLElement{
  set layout(v){if(v!==this._layout){this._layout=v;if(this.shadowRoot.firstChild)this.render();}}
  get layout(){return this._layout;}
  async load(){
-  const h=this._h,c=this.config;if(!h||!c.entity||this.busy)return;
+  const h=this._h,c=this.config;if(!h||!c.entity)return;
+  if(this.busy){this._again=true;return;}
   this.busy=true;this.last=Date.now();
   try{
-   const end=c.time_mode==="now"?Date.now():new Date(c.end_time).getTime();
-   if(!Number.isFinite(end))throw Error("Ungültiger Bezugszeitpunkt");
-   const start=end-(Number(c.duration)||24)*(DURATIONS[c.duration_unit]||DURATIONS.hours);
+   const today=dayStart(new Date());
+   if(!c.show_date_picker||!this._day)this._day=today;
+   const day=this._day,start=day.getTime(),end=Math.min(addDays(day,1).getTime(),Date.now());
    const [entities,devices,areas,floors]=await Promise.all([
     h.callWS({type:"config/entity_registry/list"}),
     h.callWS({type:"config/device_registry/list"}),
@@ -51,38 +72,54 @@ class BasedogEnergyCard extends HTMLElement{
    const areaMap=new Map(areas.map(a=>[a.area_id,a]));
    const floorMap=new Map(floors.map(f=>[f.floor_id,f]));
    const entityMap=new Map(entities.map(e=>[e.entity_id,e]));
-   const labels=new Set(c.labels);
-   const chosen=new Set(c.entities);
-   for(const e of entities){
-    const device=deviceMap.get(e.device_id);
-    if(e.labels?.some(l=>labels.has(l))||device?.labels?.some(l=>labels.has(l)))chosen.add(e.entity_id);
-   }
+   const chosen=new Set(),names=new Map();
+   if(c.source==="energy"){
+    // devices from the energy dashboard; sub-devices (included_in_stat) are skipped to avoid double counting
+    const prefs=await h.callWS({type:"energy/get_prefs"});
+    for(const d of prefs?.device_consumption||[]){
+     if(!d?.stat_consumption||d.included_in_stat)continue;
+     chosen.add(d.stat_consumption);if(d.name)names.set(d.stat_consumption,d.name);
+    }
+   }else if(c.source==="labels"){
+    const labels=new Set(c.labels||[]);
+    for(const e of entities){
+     const device=deviceMap.get(e.device_id);
+     if(e.labels?.some(l=>labels.has(l))||device?.labels?.some(l=>labels.has(l)))chosen.add(e.entity_id);
+    }
+   }else for(const id of c.entities||[])chosen.add(id);
    chosen.delete(c.entity);
    const ids=[c.entity,...chosen];
-   const energyIds=ids.filter(id=>Object.hasOwn(UNITS,h.states[id]?.attributes?.unit_of_measurement||""));
+   const meta=await h.callWS({type:"recorder/get_statistics_metadata",statistic_ids:ids}).catch(()=>[]);
+   const metaMap=new Map((meta||[]).map(m=>[m.statistic_id,m]));
+   const isEnergy=id=>{const m=metaMap.get(id);if(m)return m.unit_class==="energy"||Object.hasOwn(UNITS,m.statistics_unit_of_measurement||"");
+    return h.states[id]?.attributes?.device_class==="energy"||Object.hasOwn(UNITS,h.states[id]?.attributes?.unit_of_measurement||"");};
+   const energyIds=ids.filter(isEnergy);
    const excluded=[...chosen].filter(id=>!energyIds.includes(id));
-   if(!energyIds.includes(c.entity))throw Error("Die Gesamtentität benötigt eine Energieeinheit (z. B. kWh).");
-   const stats=await h.callWS({type:"recorder/statistics_during_period",start_time:new Date(start).toISOString(),end_time:new Date(end).toISOString(),statistic_ids:energyIds,period:"hour",types:["sum","change"]});
+   if(!energyIds.includes(c.entity))throw Error("Die Gesamtentität ist keine Energie-Entität mit Langzeitstatistik (z. B. kWh).");
+   const stats=await h.callWS({type:"recorder/statistics_during_period",start_time:new Date(start).toISOString(),end_time:new Date(end).toISOString(),statistic_ids:energyIds,period:"hour",types:["change","sum"],units:{energy:"kWh"}});
    const values=new Map(),missing=[...excluded];
    for(const id of energyIds){
-    const v=delta(stats?.[id]),value=v===null?null:kwh(v,h.states[id]?.attributes?.unit_of_measurement);
-    if(value===null){if(id!==c.entity)missing.push(id);}else values.set(id,value);
+    let v=delta(stats?.[id]);
+    // fallback when the backend did not convert: use the unit from metadata/state
+    const unit=metaMap.get(id)?.statistics_unit_of_measurement||h.states[id]?.attributes?.unit_of_measurement;
+    if(v!==null&&!metaMap.get(id)&&Object.hasOwn(UNITS,unit||""))v*=UNITS[unit];
+    if(v===null){if(id!==c.entity)missing.push(id);}else values.set(id,v);
    }
-   if(!values.has(c.entity))throw Error("Für den Gesamtzähler sind im Zeitraum keine Langzeitstatistiken verfügbar.");
+   if(!values.has(c.entity))throw Error("Für den Gesamtzähler sind an diesem Tag keine Langzeitstatistiken verfügbar.");
    const rows=[...chosen].filter(id=>values.has(id)).map(id=>{
     const e=entityMap.get(id),p=place(e,deviceMap,areaMap,floorMap);
-    return {id,name:h.states[id]?.attributes?.friendly_name||id,value:values.get(id),...p};
+    return {id,name:names.get(id)||h.states[id]?.attributes?.friendly_name||metaMap.get(id)?.name||id,value:values.get(id),...p};
    });
    this.result={total:values.get(c.entity),rows,missing:unique(missing),selected:chosen.size};
    this.error="";
-  }catch(e){this.error=String(e.message||e);}
-  finally{this.busy=false;this.render();}
+  }catch(e){this.error=String(e?.message||e);}
+  finally{this.busy=false;this.render();if(this._again){this._again=false;this.load();}}
  }
  render(){
   const c=this.config,r=this.result;
-  const css='<style>:host{display:block;height:100%}ha-card{height:400px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}ha-card.is-vertical{height:500px}ha-card.is-grid,ha-card.is-panel{height:100%;min-height:300px}.content{flex:1;display:flex;flex-direction:column;min-height:0;box-sizing:border-box}.chart{flex:1;position:relative;min-height:200px;min-width:0}.chart svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:Roboto,Noto,sans-serif;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
+  const css='<style>:host{display:block;height:100%}ha-card{height:400px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}ha-card.is-vertical{height:500px}ha-card.is-grid,ha-card.is-panel{height:100%;min-height:300px}.content{flex:1;display:flex;flex-direction:column;min-height:0;box-sizing:border-box}.chart{flex:1;position:relative;min-height:200px;min-width:0}.chart svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}ha-card.has-datebar .content{padding-bottom:2px}.datebar{flex:none;display:flex;align-items:center;gap:2px;padding:0 8px 6px 10px;font-size:13px;color:var(--secondary-text-color)}.datebar button{position:relative;display:inline-flex;align-items:center;gap:6px;height:28px;border:0;border-radius:14px;background:none;color:inherit;font:inherit;cursor:pointer;padding:0 8px}.datebar button:hover:not(:disabled){background:color-mix(in srgb,var(--primary-text-color) 8%,transparent)}.datebar button:disabled{opacity:.35;cursor:default}.datebar ha-icon{--mdc-icon-size:18px}.datebar .nav{width:28px;padding:0;justify-content:center}.datebar .spacer{flex:1}.datebar .today{font-size:12px;font-weight:500;padding:0 10px;color:var(--primary-color);background:color-mix(in srgb,var(--primary-color) 12%,transparent)}.datebar .today:disabled{opacity:.5}.datebar input{position:absolute;inset:0;opacity:0;pointer-events:none;width:100%;border:0;padding:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:Roboto,Noto,sans-serif;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{margin-top:10px;font-size:13px}details li{overflow-wrap:anywhere}</style>';
   const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
-  this.shadowRoot.innerHTML=css+'<ha-card class="'+(this.vertical?"is-vertical ":"")+(this._layout==="grid"?"is-grid":this._layout==="panel"?"is-panel":"")+'">'+(c.title?'<div class="card-header">'+esc(c.title)+'</div>':'')+'<div class="content">'+body+'</div></ha-card>';
+  this.shadowRoot.innerHTML=css+'<ha-card class="'+(this.vertical?"is-vertical ":"")+(c.show_date_picker?"has-datebar ":"")+(this._layout==="grid"?"is-grid":this._layout==="panel"?"is-panel":"")+'">'+(c.title?'<div class="card-header">'+esc(c.title)+'</div>':'')+'<div class="content">'+body+'</div>'+this.dateBar()+'</ha-card>';
   {const ch=this.shadowRoot.querySelector(".chart");
    if(ch&&!this._measuring){const w=Math.round(ch.clientWidth),h=Math.round(ch.clientHeight);
     if(w>0&&h>0&&(Math.abs(w-(this.chartW||0))>1||Math.abs(h-(this.chartH||0))>1)){this.chartW=w;this.chartH=h;this._measuring=true;try{this.render();}finally{this._measuring=false;}return;}}
@@ -91,12 +128,33 @@ class BasedogEnergyCard extends HTMLElement{
    if(ch){this._chartRO=new ResizeObserver(entries=>{const r=entries[0]?.contentRect;if(!r)return;const w=Math.round(r.width),h=Math.round(r.height);
     if(w>0&&h>0&&(Math.abs(w-(this.chartW||0))>1||Math.abs(h-(this.chartH||0))>1)){this.chartW=w;this.chartH=h;cancelAnimationFrame(this._raf);this._raf=requestAnimationFrame(()=>this.render());}});
     this._chartRO.observe(ch);}}
+  this.bindDateBar();
   const tip=this.shadowRoot.querySelector("#sankey-tip");
   if(tip){
    const svg=this.shadowRoot.querySelector("svg");
    svg?.addEventListener("pointermove",e=>{const el=e.target.closest?.("[data-tip]");if(!el){tip.style.display="none";return;}tip.textContent=el.getAttribute("data-tip");tip.style.display="block";const w=tip.offsetWidth,h=tip.offsetHeight;tip.style.left=Math.max(8,Math.min(e.clientX+14,window.innerWidth-w-8))+"px";tip.style.top=Math.max(8,Math.min(e.clientY+14,window.innerHeight-h-8))+"px";});
    svg?.addEventListener("pointerleave",()=>tip.style.display="none");
   }
+ }
+ dateBar(){
+  if(!this.config.show_date_picker)return "";
+  const today=dayStart(new Date()),day=this._day||today,isToday=+day===+today;
+  const lang=this._h?.locale?.language||this._h?.language||undefined;
+  const opts=day.getFullYear()===today.getFullYear()?{day:"numeric",month:"short"}:{day:"numeric",month:"short",year:"numeric"};
+  const label=new Intl.DateTimeFormat(lang,opts).format(day);
+  return '<div class="datebar"><button class="date" id="db-date" title="Datum wählen"><ha-icon icon="mdi:calendar"></ha-icon><span>'+esc(label)+'</span><input type="date" id="db-input" tabindex="-1" max="'+isoDay(today)+'" value="'+isoDay(day)+'"></button><span class="spacer"></span>'+
+   '<button class="today" id="db-today" '+(isToday?"disabled":"")+'>Heute</button>'+
+   '<button class="nav" id="db-prev" title="Vorheriger Tag"><ha-icon icon="mdi:chevron-left"></ha-icon></button>'+
+   '<button class="nav" id="db-next" title="Nächster Tag" '+(isToday?"disabled":"")+'><ha-icon icon="mdi:chevron-right"></ha-icon></button></div>';
+ }
+ bindDateBar(){
+  const r=this.shadowRoot,input=r.querySelector("#db-input");if(!input)return;
+  const day=()=>this._day||dayStart(new Date());
+  r.querySelector("#db-prev").onclick=()=>this.setDay(addDays(day(),-1));
+  r.querySelector("#db-next").onclick=()=>this.setDay(addDays(day(),1));
+  r.querySelector("#db-today").onclick=()=>this.setDay(new Date());
+  r.querySelector("#db-date").onclick=()=>{try{input.showPicker();}catch(e){input.focus();input.click();}};
+  input.onchange=()=>{if(input.value){const [y,m,d]=input.value.split("-").map(Number);this.setDay(new Date(y,m-1,d));}};
  }
  diagram(data){
   // Layout and look follow the native HA energy Sankey (ha-sankey-chart.ts / ECharts):
@@ -114,29 +172,39 @@ class BasedogEnergyCard extends HTMLElement{
   const root={id:"root",label:this._h?.states[cfg.entity]?.attributes?.friendly_name||cfg.entity,value:Math.max(0,data.total),depth:0,color:primary};
   const nodes=[root],children=new Map(),map=new Map(),links=[];
   const add=(n,parent)=>{nodes.push(n);if(parent){if(!children.has(parent))children.set(parent,[]);children.get(parent).push(n);}};
-  const threshold=Math.max(0,Number(cfg.group_below_kwh)||0),small=new Map(),rows=[];
   for(const row of data.rows){
-   if(row.value>0&&threshold>0&&row.value<threshold){
-    const key=JSON.stringify(levels.filter(x=>x!=="entity").map(x=>row[x]));
-    if(!small.has(key))small.set(key,{...row,id:"group:"+key,name:"Zusammengefasst",value:0,grouped:true});
-    small.get(key).value+=row.value;
-   }else rows.push(row);
-  }
-  rows.push(...small.values());
-  for(const row of rows){
    if(!(row.value>0))continue;
    let parent="root",path="";
    for(let i=0;i<levels.length;i++){
     const level=levels[i],name=level==="entity"?row.name:row[level];
     path+=JSON.stringify([level,level==="entity"?row.id:name])+"/";
     if(!map.has(path)){
-     const n={id:path,parent,depth:i+1,label:name,value:0,color:primary,leaf:i===levels.length-1,grouped:row.grouped&&level==="entity"};
+     const n={id:path,parent,depth:i+1,label:name,value:0,color:primary,leaf:i===levels.length-1};
      map.set(path,n);add(n,parent);
     }
     map.get(path).value+=row.value;parent=path;
    }
   }
   const lastDepth=Math.max(1,levels.length);
+  // Fold small values: bottom-up over the configured number of levels, all children of one
+  // parent below the threshold become one "Zusammengefasst" node in the last column.
+  const threshold=Math.max(0,Number(cfg.group_below_kwh)||0);
+  const groupLevels=Math.min(lastDepth,Math.max(1,Number(cfg.group_levels)||1));
+  if(threshold>0){
+   const removed=new Set(),drop=id=>{removed.add(id);for(const k of children.get(id)||[])drop(k.id);};
+   for(let k=0;k<groupLevels;k++){
+    const d=lastDepth-k;
+    for(const parent of nodes.filter(n=>n.depth===d-1&&!removed.has(n.id))){
+     const list=children.get(parent.id)||[];
+     const small=list.filter(n=>n.depth===d&&!n.grouped&&n.value<threshold);
+     if(small.length<2)continue;
+     small.forEach(n=>drop(n.id));
+     children.set(parent.id,list.filter(n=>!removed.has(n.id)));
+     add({id:"group:"+parent.id+"@"+d,parent:parent.id,depth:lastDepth,label:"Zusammengefasst ("+small.length+")",value:small.reduce((t,n)=>t+n.value,0),leaf:true,grouped:true},parent.id);
+    }
+   }
+   for(let i=nodes.length-1;i>=0;i--)if(removed.has(nodes[i].id))nodes.splice(i,1);
+  }
   let leafIndex=0;
   for(const n of nodes)if(n.leaf)n.color=n.grouped?gray:graph(leafIndex++);
   const assigned=data.rows.reduce((s,x)=>s+Math.max(0,x.value),0);
@@ -146,7 +214,8 @@ class BasedogEnergyCard extends HTMLElement{
   }
   for(const n of nodes)if(n.parent)links.push({source:n.parent,target:n.id,value:n.value});
   // depth-first order keeps siblings with their parents; untracked goes last (like native).
-  for(const list of children.values())list.sort((a,b)=>(a.untracked?1:0)-(b.untracked?1:0));
+  const tail=n=>n.untracked?2:n.grouped?1:0;
+  for(const list of children.values())list.sort((a,b)=>tail(a)-tail(b));
   const rank=new Map(),walk=id=>{for(const n of children.get(id)||[]){rank.set(n.id,rank.size);walk(n.id);}};
   walk("root");
   const sections=lastDepth+1;
@@ -305,43 +374,62 @@ class BasedogEnergyCard extends HTMLElement{
   return (assigned>data.total+.00001?'<p class="warning">Zugeordnete Werte übersteigen den Gesamtverbrauch. Prüfe Doppelzählungen.</p>':"")+'<div class="chart"><svg preserveAspectRatio="xMinYMin meet" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Sankey-Energieverbrauch"><defs>'+gradients+'</defs>'+paths+bars+labels+'</svg></div><div id="sankey-tip" class="tip" role="tooltip"></div>'+missing;
  }
 }
+const EDITOR_LABELS={title:"Titel",entity:"Zentrale Energieentität (Gesamtverbrauch)",source:"Quelle der Verbraucher",labels:"Labels",entities:"Energie-Entitäten",
+ show_date_picker:"Datumsauswahl unten anzeigen",orientation:"Darstellung",levels:"Ebenen",show_labels:"Beschriftungen im Diagramm anzeigen",
+ show_values:"Werte (kWh) in den Beschriftungen anzeigen",group_below_kwh:"Kleine Werte zusammenfassen unter",group_levels:"Zusammenfassen über Ebenen"};
+const EDITOR_HELP={source:"Energie-Dashboard: Geräte aus den Energie-Einstellungen. Labels/Entitäten: eigene Auswahl.",
+ show_date_picker:"Ohne Datumsauswahl wird immer der heutige Tag angezeigt.",levels:"Reihenfolge immer Etage → Bereich → Entität.",
+ group_below_kwh:"0 = aus",group_levels:"1 = nur Entitäten, 2 = auch Bereiche, 3 = auch Etagen"};
+const ENERGY_FILTER={domain:"sensor",device_class:"energy"};
+function editorSchema(c){
+ return [
+  {name:"title",selector:{text:{}}},
+  {name:"entity",required:true,selector:{entity:{filter:ENERGY_FILTER}}},
+  {name:"source",selector:{select:{mode:"dropdown",options:[{value:"energy",label:"Energie-Dashboard"},{value:"labels",label:"Labels"},{value:"entities",label:"Entitäten"}]}}},
+  ...(c.source==="labels"?[{name:"labels",selector:{label:{multiple:true}}}]:[]),
+  ...(c.source==="entities"?[{name:"entities",selector:{entity:{multiple:true,filter:ENERGY_FILTER}}}]:[]),
+  {name:"show_date_picker",selector:{boolean:{}}},
+  {name:"orientation",selector:{select:{mode:"dropdown",options:[{value:"auto",label:"Automatisch nach Breite"},{value:"vertical",label:"Immer vertikal"},{value:"horizontal",label:"Immer horizontal"}]}}},
+  {name:"levels",selector:{select:{multiple:true,mode:"list",options:[{value:"floor",label:"Etage"},{value:"area",label:"Bereich"},{value:"entity",label:"Entität"}]}}},
+  {name:"show_labels",selector:{boolean:{}}},
+  {name:"show_values",selector:{boolean:{}}},
+  {type:"grid",name:"",schema:[
+   {name:"group_below_kwh",selector:{number:{min:0,step:0.01,mode:"box",unit_of_measurement:"kWh"}}},
+   {name:"group_levels",selector:{number:{min:1,max:3,step:1,mode:"box"}}}
+  ]}
+ ];
+}
 class BasedogEnergyEditor extends HTMLElement{
  constructor(){super();this.attachShadow({mode:"open"});this.config=normalize({});}
- setConfig(c){this.config=normalize(c);this.render();}
- set hass(h){this._h=h;if(!this.shadowRoot.childElementCount)this.render();}
- render(){
-  const c=this.config,h=this._h,states=Object.values(h?.states||{}).filter(s=>Object.hasOwn(UNITS,s.attributes?.unit_of_measurement||""));
-  const options=states.map(s=>'<option value="'+esc(s.entity_id)+'" '+(c.entity===s.entity_id?"selected":"")+'>'+esc(s.attributes?.friendly_name||s.entity_id)+'</option>').join("");
-  const input=(key,title,value,type="text")=>'<label>'+title+'</label><input data-key="'+key+'" type="'+type+'" value="'+esc(value)+'">';
-  const select=(key,title,opts)=>'<label>'+title+'</label><select data-key="'+key+'">'+opts.map(([v,t])=>'<option value="'+v+'" '+(c[key]===v?"selected":"")+'>'+t+'</option>').join("")+'</select>';
-  this.shadowRoot.innerHTML='<style>.version{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;margin-bottom:12px;border:1px solid var(--divider-color,#aaa);border-radius:8px;background:var(--secondary-background-color,#f6f6f6);font-weight:600}.version strong{font-size:16px;color:var(--primary-color,#1682a0)}label{display:block;margin:12px 0 4px;font-weight:600}input,textarea,select{box-sizing:border-box;width:100%;padding:9px;border:1px solid var(--divider-color,#aaa);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#222)}.check{display:flex;gap:10px;align-items:center;font-weight:400}.check input{width:auto}.hint{font-size:12px;color:var(--secondary-text-color)}</style>'+'<div class="version"><span>basedog_energy_card</span><strong>Version '+CARD_VERSION+'</strong></div>'+
-   input("title","Titel",c.title)+'<label>Zentrale Energieentität</label><select data-key="entity"><option value="">Auswählen</option>'+options+'</select>'+
-   '<label>Weitere Entitäten (eine ID pro Zeile)</label><textarea data-key="entities" rows="4">'+esc(c.entities.join("\n"))+'</textarea>'+
-   '<label>Labels (eine Label-ID pro Zeile)</label><textarea data-key="labels" rows="3">'+esc(c.labels.join("\n"))+'</textarea>'+
-   input("duration","Dauer",c.duration,"number")+
-   input("group_below_kwh","Verbräuche unter (kWh) zusammenfassen, 0 = aus",c.group_below_kwh||0,"number")+
-   select("duration_unit","Einheit",[["minutes","Minuten"],["hours","Stunden"],["days","Tage"],["weeks","Wochen"]])+
-   select("orientation","Darstellung",[[ "auto","Automatisch nach Breite"],["vertical","Immer vertikal"],["horizontal","Immer horizontal"]])+
-   select("time_mode","Bezugszeitpunkt",[["now","Jetzt"],["fixed","Fester Zeitpunkt"]])+
-   input("end_time","Fester Endzeitpunkt",c.end_time,"datetime-local")+
-   '<label class="check"><input type="checkbox" data-show-labels '+(c.show_labels!==false?"checked":"")+'> Beschriftungen im Diagramm anzeigen</label>'+
-   '<label class="check"><input type="checkbox" data-show-values '+(c.show_values===true?"checked":"")+'> Werte (kWh) in den Beschriftungen anzeigen</label>'+
-   '<label>Strukturierung</label><p class="hint">Ebenen einzeln ein- oder ausschalten. Die Reihenfolge ist immer Etage → Bereich → Entität.</p>'+
-   ORDER.map(k=>'<label class="check"><input type="checkbox" data-level="'+k+'" '+(c.levels.includes(k)?"checked":"")+'>'+({floor:"Etage",area:"Bereich",entity:"Entität"}[k])+'</label>').join("");
-  this.shadowRoot.querySelectorAll("[data-key]").forEach(el=>el.addEventListener("change",()=>{
-   const k=el.dataset.key,v=["entities","labels"].includes(k)?el.value.split(/[\n,]/).map(x=>x.trim()).filter(Boolean):["duration","group_below_kwh"].includes(k)?Number(el.value):el.value;
-   this.config={...this.config,[k]:v};this.emit();
-  }));
-  this.shadowRoot.querySelector("[data-show-values]").addEventListener("change",el=>{this.config={...this.config,show_values:el.target.checked};this.emit();});
-  this.shadowRoot.querySelector("[data-show-labels]").addEventListener("change",el=>{this.config={...this.config,show_labels:el.target.checked};this.emit();});
-  this.shadowRoot.querySelectorAll("[data-level]").forEach(el=>el.addEventListener("change",()=>{
-   const levels=new Set(this.config.levels);if(el.checked)levels.add(el.dataset.level);else levels.delete(el.dataset.level);
-   this.config={...this.config,levels:ORDER.filter(k=>levels.has(k))};this.emit();
-  }));
+ setConfig(c){this.config=normalize(c);this.update();}
+ set hass(h){this._h=h;this.update();}
+ connectedCallback(){this.ensureForm();}
+ async ensureForm(){
+  // ha-form and the selectors are lazy loaded by HA; loading a built-in card editor pulls them in.
+  if(!customElements.get("ha-form")){
+   try{const helpers=await window.loadCardHelpers?.();const card=await helpers?.createCardElement({type:"entities",entities:[]});await card?.constructor?.getConfigElement?.();}catch(e){}
+  }
+  this.update();
+ }
+ update(){
+  const r=this.shadowRoot;
+  if(!r.childElementCount){
+   r.innerHTML='<style>.version{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;margin-bottom:12px;border:1px solid var(--divider-color,#aaa);border-radius:8px;font-size:13px;color:var(--secondary-text-color)}.version b{color:var(--primary-text-color);font-weight:500}</style>'+
+    '<div class="version"><b>basedog_energy_card</b><span>Version '+CARD_VERSION+'</span></div>';
+   const form=document.createElement("ha-form");
+   form.computeLabel=s=>EDITOR_LABELS[s.name]??s.name;
+   form.computeHelper=s=>EDITOR_HELP[s.name];
+   form.addEventListener("value-changed",ev=>{ev.stopPropagation();this.config=normalize({...ev.detail.value,type:this.config.type});this.update();this.emit();});
+   r.append(form);this._form=form;
+  }
+  if(this._h)this._form.hass=this._h;
+  const data={...this.config,labels:this.config.labels||[],entities:this.config.entities||[]};
+  this._form.schema=editorSchema(this.config);
+  this._form.data=data;
  }
  emit(){this.dispatchEvent(new CustomEvent("config-changed",{detail:{config:this.config},bubbles:true,composed:true}));}
 }
 if(!customElements.get(TAG))customElements.define(TAG,BasedogEnergyCard);
 if(!customElements.get("basedog-energy-card-editor"))customElements.define("basedog-energy-card-editor",BasedogEnergyEditor);
 window.customCards=window.customCards||[];
-if(!window.customCards.some(x=>x.type===TAG))window.customCards.push({type:TAG,name:"basedog_energy_card",description:"Energie-Sankey nach Etage, Bereich und Entität"});
+if(!window.customCards.some(x=>x.type===TAG))window.customCards.push({type:TAG,name:"basedog_energy_card",description:"Energie-Sankey eines Tages nach Etage, Bereich und Entität"});
