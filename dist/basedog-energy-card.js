@@ -1,8 +1,8 @@
-/* basedog_energy_card v1.0.0 */
-const CARD_VERSION="1.0.0";
+/* basedog_energy_card v1.1.0 */
+const CARD_VERSION="1.1.0";
 const TAG="basedog-energy-card";
 const ORDER=["floor","area","entity"];
-const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",source:"energy",levels:[...ORDER],show_date_picker:false,show_labels:true,show_values:false,orientation:"auto",group_mode:"value",group_below_kwh:0,group_levels:1,top_n:10};
+const DEFAULT={type:"custom:basedog-energy-card",title:"Energieverbrauch",entity:"",source:"energy",detail:"entity",show_date_picker:false,show_labels:true,show_values:false,orientation:"auto",group_mode:"value",group_below_kwh:0,group_levels:1,top_n:10};
 const SOURCES=["energy","labels","entities"];
 const UNITS={Wh:.001,kWh:1,MWh:1000,GJ:1/0.0036,MJ:1/3.6,kJ:1/3600,J:1/3600000};
 const LEGACY=["duration","duration_unit","time_mode","end_time"];
@@ -12,6 +12,9 @@ const isoDay=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+S
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const unique=a=>[...new Set(a||[])];
 const activeLevels=c=>ORDER.filter(x=>(Array.isArray(c.levels)?c.levels:ORDER).includes(x));
+// detail depth is cumulative: floor -> [floor], area -> [floor, area], entity -> all three
+const DETAILS={floor:"Stockwerk",area:"Bereich",entity:"Entität"};
+const detailLevels=d=>ORDER.slice(0,ORDER.indexOf(d)+1);
 // Energy of the period: sum of the hourly changes (the sum-difference would drop the first hour).
 function delta(points){
  if(!Array.isArray(points)||!points.length)return null;
@@ -29,7 +32,9 @@ function normalize(c={}){
  delete out.labels;delete out.entities;
  if(out.source==="labels")out.labels=labels;
  if(out.source==="entities")out.entities=entities;
- out.levels=activeLevels(c);
+ // migrate the old levels list: its deepest level becomes the initial detail depth
+ out.detail=Object.hasOwn(DETAILS,c.detail)?c.detail:(activeLevels(c).at(-1)||"entity");
+ delete out.levels;
  out.group_below_kwh=Math.max(0,Number(out.group_below_kwh)||0);
  out.group_levels=Math.min(3,Math.max(1,Math.round(Number(out.group_levels)||1)));
  out.show_date_picker=out.show_date_picker===true;
@@ -46,7 +51,7 @@ class BasedogEnergyCard extends HTMLElement{
  constructor(){super();this.attachShadow({mode:"open"});this.config=normalize({});this.last=0;this._signature="";this.vertical=false;this.cardWidth=0;this.resizeObserver=new ResizeObserver(entries=>{const w=entries[0]?.contentRect?.width||this.clientWidth,h=entries[0]?.contentRect?.height||0;const next=this.config.orientation==="vertical"||this.config.orientation!=="horizontal"&&w<700;if(next!==this.vertical||Math.abs(w-this.cardWidth)>4||Math.abs(h-(this.hostHeight||0))>4){this.hostHeight=h;this.cardWidth=w;this.vertical=next;this.render();}});this.resizeObserver.observe(this);}
  static getConfigElement(){return document.createElement("basedog-energy-card-editor");}
  static getStubConfig(){return {...DEFAULT};}
- setConfig(c){const next=normalize(c),sig=JSON.stringify(next);this.config=next;this.vertical=next.orientation==="vertical"||next.orientation!=="horizontal"&&(this.cardWidth||this.clientWidth)<700;if(sig!==this._signature){this._signature=sig;this.last=0;this.render();this.load();}}
+ setConfig(c){const next=normalize(c),sig=JSON.stringify(next);if(!this._detail||next.detail!==this.config.detail)this._detail=next.detail;this.config=next;this.vertical=next.orientation==="vertical"||next.orientation!=="horizontal"&&(this.cardWidth||this.clientWidth)<700;if(sig!==this._signature){this._signature=sig;this.last=0;this.render();this.load();}}
  set hass(h){this._h=h;const today=!this.config.show_date_picker||!this._day||+this._day===+dayStart(new Date());
   if(!this.last||(today&&Date.now()-this.last>60000))this.load();}
  setDay(d){const today=dayStart(new Date());d=dayStart(d);if(d>today)d=today;this._day=d;this.result=null;this.last=0;this.render();this.load();}
@@ -119,9 +124,9 @@ class BasedogEnergyCard extends HTMLElement{
  }
  render(){
   const c=this.config,r=this.result;
-  const css='<style>:host{display:block;height:100%}ha-card{height:400px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}ha-card.is-vertical{height:500px}ha-card.is-grid,ha-card.is-panel{height:100%;min-height:300px}.content{flex:1;display:flex;flex-direction:column;min-height:0;box-sizing:border-box}.chart{flex:1;position:relative;min-height:120px;min-width:0}.chart svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}ha-card.has-datebar .content{padding-bottom:2px}.datebar{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:2px;padding:0 8px 6px 10px;font-size:13px;color:var(--secondary-text-color)}.datebar button{position:relative;display:inline-flex;align-items:center;gap:6px;height:28px;border:0;border-radius:14px;background:none;color:inherit;font:inherit;cursor:pointer;padding:0 8px}.datebar button:hover:not(:disabled){background:color-mix(in srgb,var(--primary-text-color) 8%,transparent)}.datebar button:disabled{opacity:.35;cursor:default}.datebar ha-icon{--mdc-icon-size:18px}.datebar .nav{width:28px;padding:0;justify-content:center}.datebar .spacer{flex:1}.datebar .today{font-size:12px;font-weight:500;padding:0 10px;color:var(--primary-color);background:color-mix(in srgb,var(--primary-color) 12%,transparent)}.datebar .today:disabled{opacity:.5}.datebar input{position:absolute;inset:0;opacity:0;pointer-events:none;width:100%;border:0;padding:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:Roboto,Noto,sans-serif;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{flex:none;margin-top:8px;font-size:13px}details summary{cursor:pointer}details ul{max-height:140px;overflow:auto;margin:6px 0 0;padding-left:20px}details li{overflow-wrap:anywhere;line-height:1.5}details .id{color:var(--secondary-text-color);font-size:12px}</style>';
+  const css='<style>:host{display:block;height:100%}ha-card{height:400px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}ha-card.is-vertical{height:500px}ha-card.is-grid,ha-card.is-panel{height:100%;min-height:300px}.content{flex:1;display:flex;flex-direction:column;min-height:0;box-sizing:border-box}.chart{flex:1;position:relative;min-height:120px;min-width:0}.chart svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}.card-header{font-family:var(--ha-card-header-font-family,inherit);font-size:var(--ha-card-header-font-size,24px);font-weight:var(--ha-font-weight-normal,400);letter-spacing:-.012em;line-height:32px;color:var(--ha-card-header-color,var(--primary-text-color));padding:24px 16px 16px;display:block}.content{padding:0 16px 16px}.card-header+.content{padding-top:0}ha-card.has-datebar .content{padding-bottom:2px}.datebar{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:2px;padding:0 8px 6px 10px;font-size:13px;color:var(--secondary-text-color)}.datebar button{position:relative;display:inline-flex;align-items:center;gap:6px;height:28px;border:0;border-radius:14px;background:none;color:inherit;font:inherit;cursor:pointer;padding:0 8px}.datebar button:hover:not(:disabled){background:color-mix(in srgb,var(--primary-text-color) 8%,transparent)}.datebar button:disabled{opacity:.35;cursor:default}.datebar ha-icon{--mdc-icon-size:18px}.datebar .nav{width:28px;padding:0;justify-content:center}.datebar .spacer{flex:1}.datebar .today{font-size:12px;font-weight:500;padding:0 10px;color:var(--primary-color);background:color-mix(in srgb,var(--primary-color) 12%,transparent)}.datebar .today:disabled{opacity:.5}.datebar .detail{position:relative;display:inline-flex;align-items:center;height:28px;border-radius:14px;margin-right:4px}.datebar .detail:hover{background:color-mix(in srgb,var(--primary-text-color) 8%,transparent)}.datebar select{appearance:none;-webkit-appearance:none;border:0;background:none;color:inherit;font:inherit;height:28px;padding:0 24px 0 10px;cursor:pointer;outline:none}.datebar select option{color:var(--primary-text-color);background:var(--card-background-color,#fff)}.datebar .detail ha-icon{position:absolute;right:4px;pointer-events:none}.datebar input{position:absolute;inset:0;opacity:0;pointer-events:none;width:100%;border:0;padding:0}.muted{color:var(--secondary-text-color);font-size:12px;margin:8px 0 0}p.warning,p.error{margin:0 0 8px}.warning{color:var(--warning-color,#c57c00)}.error{color:var(--error-color,#d44)}.scroll{overflow-x:auto}svg{display:block;width:100%;max-width:100%;height:auto}.scroll{min-width:0} .sankey-hover{cursor:help} .tip{position:fixed;z-index:9999;pointer-events:none;background:var(--card-background-color,#222);color:var(--primary-text-color,#fff);border:1px solid var(--divider-color,#777);box-shadow:0 6px 20px #0004;border-radius:8px;padding:10px 12px;max-width:280px;white-space:pre-line;font-size:13px;display:none}svg text{fill:var(--primary-text-color,currentColor);font-family:Roboto,Noto,sans-serif;font-weight:400}svg path.sankey-hover{transition:fill-opacity .15s}svg path.sankey-hover:hover{fill-opacity:.7}svg rect.sankey-hover{cursor:default}.sankey-hover{cursor:default}details{flex:none;margin-top:8px;font-size:13px}details summary{cursor:pointer}details ul{max-height:140px;overflow:auto;margin:6px 0 0;padding-left:20px}details li{overflow-wrap:anywhere;line-height:1.5}details .id{color:var(--secondary-text-color);font-size:12px}</style>';
   const body=!c.entity?"Bitte die zentrale Energieentität im Karteneditor auswählen.":this.error?'<p class="error">'+esc(this.error)+'</p>':r?this.diagram(r):"Lade Verbrauchsdaten …";
-  this.shadowRoot.innerHTML=css+'<ha-card class="'+(this.vertical?"is-vertical ":"")+(c.show_date_picker?"has-datebar ":"")+(this._layout==="grid"?"is-grid":this._layout==="panel"?"is-panel":"")+'">'+(c.title?'<div class="card-header">'+esc(c.title)+'</div>':'')+'<div class="content">'+body+'</div>'+this.dateBar()+'</ha-card>';
+  this.shadowRoot.innerHTML=css+'<ha-card class="'+(this.vertical?"is-vertical ":"")+"has-datebar "+(this._layout==="grid"?"is-grid":this._layout==="panel"?"is-panel":"")+'">'+(c.title?'<div class="card-header">'+esc(c.title)+'</div>':'')+'<div class="content">'+body+'</div>'+this.dateBar()+'</ha-card>';
   {const ch=this.shadowRoot.querySelector(".chart");
    if(ch&&!this._measuring){const w=Math.round(ch.clientWidth),h=Math.round(ch.clientHeight);
     if(w>0&&h>0&&(Math.abs(w-(this.chartW||0))>1||Math.abs(h-(this.chartH||0))>1)){this.chartW=w;this.chartH=h;this._measuring=true;try{this.render();}finally{this._measuring=false;}return;}}
@@ -140,18 +145,22 @@ class BasedogEnergyCard extends HTMLElement{
   }
  }
  dateBar(){
-  if(!this.config.show_date_picker)return "";
+  const cur=this._detail||this.config.detail;
+  const detail='<label class="detail" title="Detailtiefe"><select id="db-detail">'+Object.entries(DETAILS).map(([v,t])=>'<option value="'+v+'"'+(v===cur?' selected':'')+'>'+t+'</option>').join("")+'</select><ha-icon icon="mdi:menu-down"></ha-icon></label>';
+  if(!this.config.show_date_picker)return '<div class="datebar">'+detail+'</div>';
   const today=dayStart(new Date()),day=this._day||today,isToday=+day===+today;
   const lang=this._h?.locale?.language||this._h?.language||undefined;
   const opts=day.getFullYear()===today.getFullYear()?{day:"numeric",month:"short"}:{day:"numeric",month:"short",year:"numeric"};
   const label=new Intl.DateTimeFormat(lang,opts).format(day);
-  return '<div class="datebar"><button class="date" id="db-date" title="Datum wählen"><ha-icon icon="mdi:calendar"></ha-icon><span>'+esc(label)+'</span><input type="date" id="db-input" tabindex="-1" max="'+isoDay(today)+'" value="'+isoDay(day)+'"></button>'+
+  return '<div class="datebar">'+detail+'<button class="date" id="db-date" title="Datum wählen"><ha-icon icon="mdi:calendar"></ha-icon><span>'+esc(label)+'</span><input type="date" id="db-input" tabindex="-1" max="'+isoDay(today)+'" value="'+isoDay(day)+'"></button>'+
    '<button class="today" id="db-today" '+(isToday?"disabled":"")+'>Heute</button>'+
    '<button class="nav" id="db-prev" title="Vorheriger Tag"><ha-icon icon="mdi:chevron-left"></ha-icon></button>'+
    '<button class="nav" id="db-next" title="Nächster Tag" '+(isToday?"disabled":"")+'><ha-icon icon="mdi:chevron-right"></ha-icon></button></div>';
  }
  bindDateBar(){
-  const r=this.shadowRoot,input=r.querySelector("#db-input");if(!input)return;
+  const r=this.shadowRoot,sel=r.querySelector("#db-detail");
+  if(sel)sel.onchange=()=>{this._detail=sel.value;this.render();};
+  const input=r.querySelector("#db-input");if(!input)return;
   const day=()=>this._day||dayStart(new Date());
   r.querySelector("#db-prev").onclick=()=>this.setDay(addDays(day(),-1));
   r.querySelector("#db-next").onclick=()=>this.setDay(addDays(day(),1));
@@ -163,7 +172,7 @@ class BasedogEnergyCard extends HTMLElement{
   // Layout and look follow the native HA energy Sankey (ha-sankey-chart.ts / ECharts):
   // nodeWidth 15, nodeGap 6, label font 12, link opacity .4 with curveness .5,
   // one shared value scale, nodes stacked from the top, labels right of / below nodes.
-  const cfg=this.config,levels=activeLevels(cfg),vertical=this.vertical;
+  const cfg=this.config,levels=detailLevels(this._detail||cfg.detail),vertical=this.vertical;
   const showValues=cfg.show_values===true;
   const NODE=15,GAP=6,LABEL_DIST=5,FONT=12,MARGIN=5;
   const st=getComputedStyle(this),cv=n=>st.getPropertyValue(n).trim();
@@ -404,7 +413,6 @@ function editorSchema(c){
   {name:"show_values",selector:{boolean:{}}},
   {name:"show_date_picker",selector:{boolean:{}}},
   {name:"orientation",selector:{select:{mode:"dropdown",options:[{value:"auto",label:"Automatisch nach Breite"},{value:"vertical",label:"Immer vertikal"},{value:"horizontal",label:"Immer horizontal"}]}}},
-  {name:"levels",selector:{select:{multiple:true,mode:"list",options:[{value:"floor",label:"Etage"},{value:"area",label:"Bereich"},{value:"entity",label:"Entität"}]}}},
   {name:"group_mode",selector:{select:{mode:"dropdown",options:[{value:"value",label:"Wert (Schwelle)"},{value:"top",label:"Top N"}]}}},
   ...(c.group_mode==="top"?[{name:"top_n",selector:{number:{min:1,step:1,mode:"box"}}}]:[{type:"grid",name:"",schema:[
    {name:"group_below_kwh",selector:{number:{min:0,step:"any",mode:"box",unit_of_measurement:"kWh"}}},
